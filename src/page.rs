@@ -18,7 +18,7 @@ impl Page {
     }
 
     pub fn make_mut(self) -> Result<PageMut> {
-        protect(self.base.ptr, self.base.len, Protect::ReadWrite)?;
+        unsafe { protect(self.base.ptr, self.base.len, Protect::ReadWrite) }?;
         Ok(self.base)
     }
 }
@@ -61,18 +61,18 @@ impl PageMut {
     }
 
     pub fn make_const(self) -> Result<Page> {
-        protect(self.ptr, self.len, Protect::ReadOnly)?;
+        unsafe { protect(self.ptr, self.len, Protect::ReadOnly) }?;
         Ok(Page { base: self })
     }
 
     pub fn flush(&self, mode: Flush) -> Result<()> {
-        flush(self.ptr, self.len, mode)
+        unsafe { flush(self.ptr, self.len, mode) }
     }
 }
 
 impl Drop for PageMut {
     fn drop(&mut self) {
-        unmap(self.ptr, self.len).unwrap_or_default();
+        unsafe { unmap(self.ptr, self.len) }.unwrap_or_default();
     }
 }
 

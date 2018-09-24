@@ -22,7 +22,7 @@ impl Ring {
 
 impl Drop for Ring {
     fn drop(&mut self) {
-        unmap_ring(self.ptr, self.len);
+        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default();
     }
 }
 
@@ -82,7 +82,7 @@ impl UnboundRing {
 
 impl Drop for UnboundRing {
     fn drop(&mut self) {
-        unmap_ring(self.ptr, self.len);
+        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default()
     }
 }
 
