@@ -1,6 +1,6 @@
 extern crate libc;
 
-use super::{Protect, Flush};
+use ::{Protect, Flush};
 
 use std::ptr;
 use std::io::{Result, Error};
@@ -13,17 +13,21 @@ use self::libc::{
     PROT_READ, PROT_WRITE, MAP_SHARED, MAP_FAILED, MS_SYNC, MS_ASYNC, _SC_PAGESIZE
 };
 
+// For macOS and iOS we use the mach vm system for rings. The posix module
+// does work correctly on these targets, but it necessitates an otherwise
+// uneeded file descriptor.
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-#[path = "macos.rs"]
-mod target;
+mod mach;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use self::mach::{map_ring, unmap_ring};
 
+// For non-mach targets load the POSIX version of the ring mapping functions.
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-#[path = "posix.rs"]
-mod target;
+mod posix;
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+pub use self::posix::{map_ring, unmap_ring};
 
-pub use self::target::{map_ring, unmap_ring};
-
-pub fn get_page_size() -> usize {
+pub fn page_size() -> usize {
     unsafe { sysconf(_SC_PAGESIZE) as usize }
 }
 

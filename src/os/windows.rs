@@ -1,6 +1,6 @@
 extern crate winapi;
 
-use super::{Protect, Flush};
+use crate::{Protect, Flush};
 
 use std::{ptr, mem};
 use std::io::{Result, Error};
@@ -16,7 +16,8 @@ use winapi::um::memoryapi::{
 };
 use winapi::um::winnt::{PAGE_READONLY, PAGE_READWRITE};
 
-pub fn get_page_size() -> usize {
+/// Requests the page size from the system.
+pub fn page_size() -> usize {
     unsafe {
         let mut info: SYSTEM_INFO = mem::uninitialized();
         GetSystemInfo(&mut info as LPSYSTEM_INFO);

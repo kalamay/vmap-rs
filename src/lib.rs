@@ -3,17 +3,16 @@ use std::io::Result;
 use std::sync::{Once, ONCE_INIT};
 
 #[cfg(unix)]
-#[path = "unix/mod.rs"]
-mod target;
+pub mod os {
+    mod unix;
+    pub use self::unix::*;
+}
 
 #[cfg(windows)]
-#[path = "windows/mod.rs"]
-mod target;
-
-pub use self::target::{
-    map_file, map_ring,
-    unmap, unmap_ring, protect, flush
-};
+pub mod os {
+    mod windows;
+    pub use self::windows::*;
+}
 
 mod page;
 pub use self::page::{Page, PageMut};
@@ -39,10 +38,11 @@ pub enum Flush {
 static mut SIZE:usize = 0;
 static INIT: Once = ONCE_INIT;
 
-pub fn get_page_size() -> usize {
+/// Gets a cached version of the system page size.
+pub fn page_size() -> usize {
     unsafe {
         INIT.call_once(|| {
-            SIZE = self::target::get_page_size();
+            SIZE = self::os::page_size();
         });
         SIZE
     }
@@ -67,14 +67,23 @@ impl Alloc {
     /// # extern crate vmap;
     ///
     /// use vmap::Alloc;
+    /// use std::fs::OpenOptions;
     ///
-    /// let info = Alloc::new();
-    /// let pages = info.page_count(200);
+    /// # fn main() -> std::io::Result<()> {
+    /// let alloc = Alloc::new();
+    /// let pages = alloc.page_count(200);
     /// assert_eq!(pages, 1);
+    ///
+    /// let f = OpenOptions::new().read(true).open("README.md")?;
+    /// let page = alloc.file_page(&f, 0, 1)?;
+    /// assert_eq!(b"# vmap-rs", &page[..9]);
+    ///
+    /// # Ok(())
+    /// # }
     /// ```
     #[inline]
     pub fn new() -> Self {
-        unsafe { Self::new_size(get_page_size()) }
+        unsafe { Self::new_size(page_size()) }
     }
 
     /// Creates a type for calculating page numbers and byte offsets using a
@@ -117,7 +126,7 @@ impl Alloc {
     pub fn file_page(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
     	let len = self.page_size(count);
         unsafe {
-            let ptr = map_file(file, self.page_size(no), len, Protect::ReadOnly)?;
+            let ptr = self::os::map_file(file, self.page_size(no), len, Protect::ReadOnly)?;
             Ok(Page::new(ptr, len))
         }
     }
@@ -126,7 +135,7 @@ impl Alloc {
     pub fn file_page_mut(&self, file: &File, no: Pgno, count: Pgno) -> Result<PageMut> {
     	let len = self.page_size(count);
         unsafe {
-            let ptr = map_file(file, self.page_size(no), len, Protect::ReadWrite)?;
+            let ptr = self::os::map_file(file, self.page_size(no), len, Protect::ReadWrite)?;
             Ok(PageMut::new(ptr, len))
         }
     }
@@ -135,7 +144,7 @@ impl Alloc {
     pub fn ring(&self, len: usize) -> Result<Ring> {
     	let len = self.page_round(len);
         unsafe {
-            let ptr = map_ring(len)?;
+            let ptr = self::os::map_ring(len)?;
             Ok(Ring::new(ptr, len))
         }
     }
@@ -144,7 +153,7 @@ impl Alloc {
     pub fn unbound_ring(&self, len: usize) -> Result<UnboundRing> {
     	let len = self.page_round(len);
         unsafe {
-            let ptr = map_ring(len)?;
+            let ptr = self::os::map_ring(len)?;
             Ok(UnboundRing::new(ptr, len))
         }
     }

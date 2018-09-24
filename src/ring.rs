@@ -1,4 +1,5 @@
-use super::{unmap_ring, Seq};
+use ::Seq;
+use ::os::unmap_ring;
 
 use std;
 use std::io::{Result, BufRead, Read, Write};

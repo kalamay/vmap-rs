@@ -3,8 +3,8 @@ use std::io::Result;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
 
-use super::{Protect, Flush};
-use super::{unmap, protect, flush};
+use ::{Protect, Flush};
+use ::os::{unmap, protect, flush};
 
 
 
