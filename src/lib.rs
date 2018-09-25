@@ -38,7 +38,7 @@ pub enum Protect {
 pub enum Flush {
     /// Request dirty pages to be written immediately and block until completed.
     ///
-    /// This is not supported on Windows, and the flush is always performed asynchronously.
+    /// This is not supported on Windows. The flush is always performed asynchronously.
     Sync,
     /// Request dirty pages to be written but do not wait for completion.
     Async,
@@ -72,6 +72,25 @@ pub fn page_size() -> usize {
 /// adjustements when impropoer boundaries are used.
 ///
 /// This type can also be used for convenient page size calculations.
+///
+/// # Example
+///
+/// ```
+/// # extern crate vmap;
+/// use vmap::Alloc;
+/// use std::fs::OpenOptions;
+///
+/// # fn main() -> std::io::Result<()> {
+/// let alloc = Alloc::new();
+/// let pages = alloc.page_count(200);
+/// assert_eq!(pages, 1);
+///
+/// let f = OpenOptions::new().read(true).open("README.md")?;
+/// let page = alloc.file_page(&f, 0, 1)?;
+/// assert_eq!(b"# vmap-rs", &page[..9]);
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Copy, Clone)]
 pub struct Alloc {
     sizem: usize,
@@ -84,26 +103,6 @@ impl Alloc {
     /// The size is determined from the system's configurated page size.
     /// While the call to get this value is cached, it is preferrable to
     /// reuse the Alloc instance when possible.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # extern crate vmap;
-    /// use vmap::Alloc;
-    /// use std::fs::OpenOptions;
-    ///
-    /// # fn main() -> std::io::Result<()> {
-    /// let alloc = Alloc::new();
-    /// let pages = alloc.page_count(200);
-    /// assert_eq!(pages, 1);
-    ///
-    /// let f = OpenOptions::new().read(true).open("README.md")?;
-    /// let page = alloc.file_page(&f, 0, 1)?;
-    /// assert_eq!(b"# vmap-rs", &page[..9]);
-    ///
-    /// # Ok(())
-    /// # }
-    /// ```
     #[inline]
     pub fn new() -> Self {
         unsafe { Self::new_size(page_size()) }
@@ -112,7 +111,22 @@ impl Alloc {
     /// Creates a type for calculating page numbers and byte offsets using a
     /// known page size.
     ///
-    /// The size *must* be a power-of-2.
+    /// # Safety
+    ///
+    /// The size *must* be a power-of-2. To successfully map pages, the size
+    /// must also be a mutliple of the actual system page size. Hypothetically
+    /// this could be used to simulate larger page sizes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use vmap::Alloc;
+    ///
+    /// let size = vmap::page_size();
+    /// let alloc = unsafe { Alloc::new_size(size << 2) };
+    /// assert_eq!(alloc.page_round(1), size << 2);   // probably 16384
+    /// ```
     #[inline]
     pub unsafe fn new_size(size: usize) -> Self {
         Self {
@@ -127,12 +141,14 @@ impl Alloc {
     ///
     /// ```
     /// use vmap::Alloc;
-    /// let alloc = unsafe { Alloc::new_size(4096) };
+    ///
+    /// let alloc = Alloc::new();
+    /// let size = vmap::page_size();
     /// assert_eq!(alloc.page_round(0), 0);
-    /// assert_eq!(alloc.page_round(1), 4096);
-    /// assert_eq!(alloc.page_round(4095), 4096);
-    /// assert_eq!(alloc.page_round(4096), 4096);
-    /// assert_eq!(alloc.page_round(4097), 8192);
+    /// assert_eq!(alloc.page_round(1), size);        // probably 4096
+    /// assert_eq!(alloc.page_round(size-1), size);   // probably 4096
+    /// assert_eq!(alloc.page_round(size), size);     // probably 4096
+    /// assert_eq!(alloc.page_round(size+1), size*2); // probably 8192
     /// ```
     #[inline]
     pub fn page_round(&self, len: usize) -> usize {
@@ -145,12 +161,14 @@ impl Alloc {
     ///
     /// ```
     /// use vmap::Alloc;
-    /// let alloc = unsafe { Alloc::new_size(4096) };
+    ///
+    /// let alloc = Alloc::new();
+    /// let size = vmap::page_size();
     /// assert_eq!(alloc.page_truncate(0), 0);
     /// assert_eq!(alloc.page_truncate(1), 0);
-    /// assert_eq!(alloc.page_truncate(4095), 0);
-    /// assert_eq!(alloc.page_truncate(4096), 4096);
-    /// assert_eq!(alloc.page_truncate(4097), 4096);
+    /// assert_eq!(alloc.page_truncate(size-1), 0);
+    /// assert_eq!(alloc.page_truncate(size), size);   // probably 4096
+    /// assert_eq!(alloc.page_truncate(size+1), size); // probably 4096
     /// ```
     #[inline]
     pub fn page_truncate(&self, len: usize) -> usize {
@@ -163,10 +181,12 @@ impl Alloc {
     ///
     /// ```
     /// use vmap::Alloc;
-    /// let alloc = unsafe { Alloc::new_size(4096) };
+    ///
+    /// let alloc = Alloc::new();
+    /// let size = vmap::page_size();
     /// assert_eq!(alloc.page_size(0), 0);
-    /// assert_eq!(alloc.page_size(1), 4096);
-    /// assert_eq!(alloc.page_size(2), 8192);
+    /// assert_eq!(alloc.page_size(1), size);   // probably 4096
+    /// assert_eq!(alloc.page_size(2), size*2); // probably 8192
     /// ```
     #[inline]
     pub fn page_size(&self, count: Pgno) -> usize {
@@ -179,13 +199,15 @@ impl Alloc {
     ///
     /// ```
     /// use vmap::Alloc;
-    /// let alloc = unsafe { Alloc::new_size(4096) };
+    ///
+    /// let alloc = Alloc::new();
+    /// let size = vmap::page_size();
     /// assert_eq!(alloc.page_count(0), 0);
     /// assert_eq!(alloc.page_count(1), 1);
-    /// assert_eq!(alloc.page_count(4095), 1);
-    /// assert_eq!(alloc.page_count(4096), 1);
-    /// assert_eq!(alloc.page_count(4097), 2);
-    /// assert_eq!(alloc.page_count(8192), 2);
+    /// assert_eq!(alloc.page_count(size-1), 1);
+    /// assert_eq!(alloc.page_count(size), 1);
+    /// assert_eq!(alloc.page_count(size+1), 2);
+    /// assert_eq!(alloc.page_count(size*2), 2);
     /// ```
     #[inline]
     pub fn page_count(&self, len: usize) -> Pgno {
@@ -193,6 +215,22 @@ impl Alloc {
     }
 
     /// Create a new page object mapped from a range of a file.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use vmap::Alloc;
+    /// use std::fs::OpenOptions;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let alloc = Alloc::new();
+    /// let f = OpenOptions::new().read(true).open("README.md")?;
+    /// let page = alloc.file_page(&f, 0, 1)?;
+    /// assert_eq!(b"# vmap-rs", &page[..9]);
+    ///
+    /// # Ok(())
+    /// # }
     pub fn file_page(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
     	let len = self.page_size(count);
         unsafe {
@@ -226,6 +264,35 @@ impl Alloc {
             let ptr = self::os::map_ring(len)?;
             Ok(UnboundRing::new(ptr, len))
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Alloc;
+
+    #[test]
+    fn page_size() {
+        let info = unsafe { Alloc::new_size(4096) };
+        assert_eq!(info.page_round(0), 0);
+        assert_eq!(info.page_round(1), 4096);
+        assert_eq!(info.page_round(4095), 4096);
+        assert_eq!(info.page_round(4096), 4096);
+        assert_eq!(info.page_round(4097), 8192);
+        assert_eq!(info.page_truncate(0), 0);
+        assert_eq!(info.page_truncate(1), 0);
+        assert_eq!(info.page_truncate(4095), 0);
+        assert_eq!(info.page_truncate(4096), 4096);
+        assert_eq!(info.page_truncate(4097), 4096);
+        assert_eq!(info.page_size(0), 0);
+        assert_eq!(info.page_size(1), 4096);
+        assert_eq!(info.page_size(2), 8192);
+        assert_eq!(info.page_count(0), 0);
+        assert_eq!(info.page_count(1), 1);
+        assert_eq!(info.page_count(4095), 1);
+        assert_eq!(info.page_count(4096), 1);
+        assert_eq!(info.page_count(4097), 2);
+        assert_eq!(info.page_count(8192), 2);
     }
 }
 
