@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Result;
+use std::io::{Result, Error, ErrorKind};
 use std::sync::{Once, ONCE_INIT};
 
 /// Low-level cross-platform virtual memory functions
@@ -85,9 +85,9 @@ pub fn page_size() -> usize {
 /// let pages = alloc.page_count(200);
 /// assert_eq!(pages, 1);
 ///
-/// let f = OpenOptions::new().read(true).open("README.md")?;
+/// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
 /// let page = alloc.file_page(&f, 0, 1)?;
-/// assert_eq!(b"# vmap-rs", &page[..9]);
+/// assert_eq!(b"use std::fs::File;", &page[..18]);
 /// # Ok(())
 /// # }
 /// ```
@@ -225,32 +225,80 @@ impl Alloc {
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let alloc = Alloc::new();
-    /// let f = OpenOptions::new().read(true).open("README.md")?;
+    /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = alloc.file_page(&f, 0, 1)?;
-    /// assert_eq!(b"# vmap-rs", &page[..9]);
+    /// assert_eq!(b"use std::fs::File;", &page[..18]);
     ///
     /// # Ok(())
     /// # }
+    /// ```
     pub fn file_page(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
-    	let len = self.page_size(count);
-        unsafe {
-            let ptr = self::os::map_file(file, self.page_size(no), len, Protect::ReadOnly)?;
-            Ok(Page::new(ptr, len))
+        let off = self.page_size(no);
+        let len = self.page_size(count);
+        if file.metadata()?.len() < (off+len) as u64 {
+            Err(Error::new(ErrorKind::InvalidInput, "page range not in file"))
         }
+        else {
+            unsafe {
+                let ptr = self::os::map_file(file, off, len, Protect::ReadOnly)?;
+                Ok(Page::new(ptr, len))
+            }
+        }
+    }
+
+    /// Create a new page object mapped from a range of a file without bounds
+    /// checking.
+    ///
+    /// # Safety
+    ///
+    /// This does not verify that the requsted range is valid for the file.
+    /// This can be useful in a few scenarios:
+    /// 1. When the range is already known to be valid.
+    /// 2. When a valid sub-range is known and not exceeded.
+    /// 3. When the range will become valid and is not used until then.
+    pub unsafe fn file_page_unchecked(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
+        let off = self.page_size(no);
+        let len = self.page_size(count);
+        let ptr = self::os::map_file(file, off, len, Protect::ReadOnly)?;
+        Ok(Page::new(ptr, len))
     }
 
     /// Create a new mutable page object mapped from a range of a file.
     pub fn file_page_mut(&self, file: &File, no: Pgno, count: Pgno) -> Result<PageMut> {
-    	let len = self.page_size(count);
-        unsafe {
-            let ptr = self::os::map_file(file, self.page_size(no), len, Protect::ReadWrite)?;
-            Ok(PageMut::new(ptr, len))
+        let off = self.page_size(no);
+        let len = self.page_size(count);
+        if file.metadata()?.len() < (off+len) as u64 {
+            Err(Error::new(ErrorKind::InvalidInput, "page range not in file"))
         }
+        else {
+            unsafe {
+                let ptr = self::os::map_file(file, off, len, Protect::ReadWrite)?;
+                Ok(PageMut::new(ptr, len))
+            }
+        }
+    }
+
+    /// Create a new mutable page object mapped from a range of a file.
+    /// Create a new mutable page object mapped from a range of a file
+    /// without bounds checking.
+    ///
+    /// # Safety
+    ///
+    /// This does not verify that the requsted range is valid for the file.
+    /// This can be useful in a few scenarios:
+    /// 1. When the range is already known to be valid.
+    /// 2. When a valid sub-range is known and not exceeded.
+    /// 3. When the range will become valid and is not used until then.
+    pub unsafe fn file_page_mut_unchecked(&self, file: &File, no: Pgno, count: Pgno) -> Result<PageMut> {
+        let off = self.page_size(no);
+        let len = self.page_size(count);
+        let ptr = self::os::map_file(file, off, len, Protect::ReadWrite)?;
+        Ok(PageMut::new(ptr, len))
     }
 
     /// Create a circular buffer with minumum size.
     pub fn ring(&self, len: usize) -> Result<Ring> {
-    	let len = self.page_round(len);
+        let len = self.page_round(len);
         unsafe {
             let ptr = self::os::map_ring(len)?;
             Ok(Ring::new(ptr, len))
@@ -259,7 +307,7 @@ impl Alloc {
 
     /// Create an unbound circular buffer with minumum size.
     pub fn unbound_ring(&self, len: usize) -> Result<UnboundRing> {
-    	let len = self.page_round(len);
+        let len = self.page_round(len);
         unsafe {
             let ptr = self::os::map_ring(len)?;
             Ok(UnboundRing::new(ptr, len))

@@ -24,9 +24,9 @@ use ::os::{unmap, protect, flush};
 ///
 /// # fn main() -> std::io::Result<()> {
 /// let alloc = Alloc::new();
-/// let f = OpenOptions::new().read(true).open("README.md")?;
+/// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
 /// let page = alloc.file_page(&f, 0, 1)?;
-/// assert_eq!(b"# vmap-rs", &page[..9]);
+/// assert_eq!(b"use std::fs::File;", &page[..18]);
 ///
 /// # Ok(())
 /// # }
@@ -55,13 +55,13 @@ impl Page {
     /// use std::fs::OpenOptions;
     ///
     /// # fn main() -> std::io::Result<()> {
-    /// let f = OpenOptions::new().read(true).open("README.md")?;
+    /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = unsafe {
     ///     let len = vmap::page_size();
     ///     let ptr = vmap::os::map_file(&f, 0, len, Protect::ReadOnly)?;
     ///     Page::new(ptr, len)
     /// };
-    /// assert_eq!(b"# vmap-rs", &page[..9]);
+    /// assert_eq!(b"use std::fs::File;", &page[..18]);
     ///
     /// # Ok(())
     /// # }
