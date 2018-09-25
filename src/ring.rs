@@ -28,7 +28,7 @@ impl Drop for Ring {
 }
 
 impl Seq for Ring {
-    fn mut_ptr(&self) -> *mut u8 { self.ptr }
+    unsafe fn mut_ptr(&self) -> *mut u8 { self.ptr }
     fn read_offset(&self) -> isize { (self.rpos % self.len as u64) as isize }
     fn write_offset(&self) -> isize { (self.wpos % self.len as u64) as isize }
     fn capacity(&self) -> usize { self.len }
@@ -88,7 +88,7 @@ impl Drop for UnboundRing {
 }
 
 impl Seq for UnboundRing {
-    fn mut_ptr(&self) -> *mut u8 { self.ptr }
+    unsafe fn mut_ptr(&self) -> *mut u8 { self.ptr }
     fn read_offset(&self) -> isize { ((self.wpos - self.rlen) % self.len as u64) as isize }
     fn write_offset(&self) -> isize { (self.wpos % self.len as u64) as isize }
     fn capacity(&self) -> usize { self.len }

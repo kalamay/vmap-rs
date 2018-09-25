@@ -3,7 +3,7 @@ use std::io::{Result, BufRead};
 use std::cmp;
 
 pub trait Seq: BufRead {
-    fn mut_ptr(&self) -> *mut u8;
+    unsafe fn mut_ptr(&self) -> *mut u8;
     fn read_offset(&self) -> isize;
     fn write_offset(&self) -> isize;
 
