@@ -27,10 +27,12 @@ mod posix;
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub use self::posix::{map_ring, unmap_ring};
 
+/// Requests the page size from the system.
 pub fn page_size() -> usize {
     unsafe { sysconf(_SC_PAGESIZE) as usize }
 }
 
+/// Memory maps a given range of a file.
 pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let prot = match prot {
         Protect::ReadOnly => PROT_READ,
@@ -45,6 +47,7 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
     }
 }
 
+/// Unmaps a page range from a previos mapping.
 pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
     if munmap(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error())
@@ -54,6 +57,7 @@ pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
     }
 }
 
+/// Changes the protection for a page range.
 pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     let prot = match prot {
         Protect::ReadOnly => PROT_READ,
@@ -66,6 +70,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     }
 }
 
+/// Writes modified whole pages back to the filesystem.
 pub unsafe fn flush(pg: *mut u8, len: usize, mode: Flush) -> Result<()> {
     let flags = match mode {
         Flush::Sync => MS_SYNC,

@@ -2,15 +2,16 @@ use std::fs::File;
 use std::io::Result;
 use std::sync::{Once, ONCE_INIT};
 
-#[cfg(unix)]
+/// Low-level cross-platform virtual memory functions
 pub mod os {
+    #[cfg(unix)]
     mod unix;
+    #[cfg(unix)]
     pub use self::unix::*;
-}
 
-#[cfg(windows)]
-pub mod os {
+    #[cfg(windows)]
     mod windows;
+    #[cfg(windows)]
     pub use self::windows::*;
 }
 
@@ -25,13 +26,21 @@ use self::buffer::Seq;
 
 pub type Pgno = u32;
 
+/// Protection level for a page.
 pub enum Protect {
+    /// The page(s) may only be read from.
     ReadOnly,
+    /// The page(s) may be read from and written to.
     ReadWrite
 }
 
+/// Desired behavior when flushing write changes.
 pub enum Flush {
+    /// Request dirty pages to be written immediately and block until completed.
+    ///
+    /// This is not supported on Windows, and the flush is always performed asynchronously.
     Sync,
+    /// Request dirty pages to be written but do not wait for completion.
     Async,
 }
 
@@ -39,6 +48,12 @@ static mut SIZE:usize = 0;
 static INIT: Once = ONCE_INIT;
 
 /// Gets a cached version of the system page size.
+///
+/// ```
+/// # extern crate vmap;
+/// let size = vmap::page_size();
+/// println!("the system page size is {} bytes", size);
+/// ```
 pub fn page_size() -> usize {
     unsafe {
         INIT.call_once(|| {
@@ -48,6 +63,15 @@ pub fn page_size() -> usize {
     }
 }
 
+/// Type for allocating anonymous and file-backed virtual memory.
+///
+/// The construction of this object is very cheap, as it does not track
+/// any of the allocations. That is handled through the Drop implementation.
+/// This serves as an entry point for safe allocation sizes. Virtual memory
+/// is restricted to allocations at page boundaries, so this type handles
+/// adjustements when impropoer boundaries are used.
+///
+/// This type can also be used for convenient page size calculations.
 #[derive(Copy, Clone)]
 pub struct Alloc {
     sizem: usize,
@@ -59,13 +83,12 @@ impl Alloc {
     ///
     /// The size is determined from the system's configurated page size.
     /// While the call to get this value is cached, it is preferrable to
-    /// reuse the PageSite instance when possible.
+    /// reuse the Alloc instance when possible.
     ///
     /// # Example
     ///
     /// ```
     /// # extern crate vmap;
-    ///
     /// use vmap::Alloc;
     /// use std::fs::OpenOptions;
     ///
@@ -99,24 +122,71 @@ impl Alloc {
     }
 
     /// Round a byte size up to the nearest page size.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use vmap::Alloc;
+    /// let alloc = unsafe { Alloc::new_size(4096) };
+    /// assert_eq!(alloc.page_round(0), 0);
+    /// assert_eq!(alloc.page_round(1), 4096);
+    /// assert_eq!(alloc.page_round(4095), 4096);
+    /// assert_eq!(alloc.page_round(4096), 4096);
+    /// assert_eq!(alloc.page_round(4097), 8192);
+    /// ```
     #[inline]
     pub fn page_round(&self, len: usize) -> usize {
         self.page_truncate(len + self.sizem)
     }
 
     /// Round a byte size down to the nearest page size.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use vmap::Alloc;
+    /// let alloc = unsafe { Alloc::new_size(4096) };
+    /// assert_eq!(alloc.page_truncate(0), 0);
+    /// assert_eq!(alloc.page_truncate(1), 0);
+    /// assert_eq!(alloc.page_truncate(4095), 0);
+    /// assert_eq!(alloc.page_truncate(4096), 4096);
+    /// assert_eq!(alloc.page_truncate(4097), 4096);
+    /// ```
     #[inline]
     pub fn page_truncate(&self, len: usize) -> usize {
         len & !self.sizem
     }
     
     /// Convert a page count into a byte size.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use vmap::Alloc;
+    /// let alloc = unsafe { Alloc::new_size(4096) };
+    /// assert_eq!(alloc.page_size(0), 0);
+    /// assert_eq!(alloc.page_size(1), 4096);
+    /// assert_eq!(alloc.page_size(2), 8192);
+    /// ```
     #[inline]
     pub fn page_size(&self, count: Pgno) -> usize {
         (count as usize) << self.shift
     }
     
     /// Covert a byte size into the number of pages necessary to contain it.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use vmap::Alloc;
+    /// let alloc = unsafe { Alloc::new_size(4096) };
+    /// assert_eq!(alloc.page_count(0), 0);
+    /// assert_eq!(alloc.page_count(1), 1);
+    /// assert_eq!(alloc.page_count(4095), 1);
+    /// assert_eq!(alloc.page_count(4096), 1);
+    /// assert_eq!(alloc.page_count(4097), 2);
+    /// assert_eq!(alloc.page_count(8192), 2);
+    /// ```
     #[inline]
     pub fn page_count(&self, len: usize) -> Pgno {
         (self.page_round(len) >> self.shift) as Pgno
@@ -159,31 +229,3 @@ impl Alloc {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::Alloc;
-
-    #[test]
-    fn page_size() {
-        let info = unsafe { Alloc::new_size(4096) };
-        assert_eq!(info.page_round(0), 0);
-        assert_eq!(info.page_round(1), 4096);
-        assert_eq!(info.page_round(4095), 4096);
-        assert_eq!(info.page_round(4096), 4096);
-        assert_eq!(info.page_round(4097), 8192);
-        assert_eq!(info.page_truncate(0), 0);
-        assert_eq!(info.page_truncate(1), 0);
-        assert_eq!(info.page_truncate(4095), 0);
-        assert_eq!(info.page_truncate(4096), 4096);
-        assert_eq!(info.page_truncate(4097), 4096);
-        assert_eq!(info.page_size(0), 0);
-        assert_eq!(info.page_size(1), 4096);
-        assert_eq!(info.page_size(2), 8192);
-        assert_eq!(info.page_count(0), 0);
-        assert_eq!(info.page_count(1), 1);
-        assert_eq!(info.page_count(4095), 1);
-        assert_eq!(info.page_count(4096), 1);
-        assert_eq!(info.page_count(4097), 2);
-        assert_eq!(info.page_count(8192), 2);
-    }
-}

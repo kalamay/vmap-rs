@@ -99,6 +99,11 @@ impl fmt::Display for MachError {
     }
 }
 
+/// Creates an anonymous circular allocation.
+///
+/// The length is the size of the sequential range, and the offset of
+/// `len+1` refers to the same memory location at offset `0`. The circle
+/// continues to up through the offset of `2*len - 1`.
 pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
     let port = mach_task_self();
     let mut addr : vm_address_t = 0;
@@ -146,6 +151,7 @@ pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
     Ok(addr as *mut u8)
 }
 
+/// Unmaps a ring mapping created by `map_ring`.
 pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     let port = mach_task_self();
     let ret = vm_deallocate(port, pg as vm_address_t, 2*len);

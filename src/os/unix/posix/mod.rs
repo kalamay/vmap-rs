@@ -15,6 +15,11 @@ use self::libc::{
 
 use super::unmap;
 
+/// Creates an anonymous circular allocation.
+///
+/// The length is the size of the sequential range, and the offset of
+/// `len+1` refers to the same memory location at offset `0`. The circle
+/// continues to up through the offset of `2*len - 1`.
 pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
     // Create a temporary file descriptor truncated to the ring size.
     let fd = tmp_open(len)?;
@@ -56,6 +61,7 @@ fn map(pg: *mut u8, len: usize, flags: c_int, fd: c_int) -> Result<*mut u8> {
     }
 }
 
+/// Unmaps a ring mapping created by `map_ring`.
 pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     unmap(pg, 2*len)
 }
