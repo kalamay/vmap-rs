@@ -1,3 +1,15 @@
+//! A cross-platform library for fast and safe memory-mapped IO
+//!
+//! This library defines a convenient API for reading and writing to files
+//! using the hosts virtual memory system. The design of the API strives to
+//! both minimize the frequency of mapping system calls while still retaining
+//! safe access.
+//!
+//! Additionally, a variety of buffer implementations are provided in the
+//! [`vmap::buf`](buf/index.html) module.
+
+//#![deny(missing_docs)]
+
 use std::fs::File;
 use std::io::{Result, Error, ErrorKind};
 use std::sync::{Once, ONCE_INIT};
@@ -18,12 +30,9 @@ pub mod os {
 mod page;
 pub use self::page::{Page, PageMut};
 
-mod ring;
-pub use self::ring::{Ring,UnboundRing};
+pub mod buf;
 
-mod buffer;
-use self::buffer::Seq;
-
+/// Type to represent whole page offsets and counts.
 pub type Pgno = u32;
 
 /// Protection level for a page.
@@ -227,6 +236,7 @@ impl Alloc {
     /// let alloc = Alloc::new();
     /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = alloc.file_page(&f, 0, 1)?;
+    /// assert_eq!(page.is_empty(), false);
     /// assert_eq!(b"use std::fs::File;", &page[..18]);
     ///
     /// # Ok(())
@@ -296,21 +306,21 @@ impl Alloc {
         Ok(PageMut::new(ptr, len))
     }
 
-    /// Create a circular buffer with minumum size.
-    pub fn ring(&self, len: usize) -> Result<Ring> {
+    /// Create a fixed size buffer.
+    pub fn buffer(&self, len: usize) -> Result<buf::Buffer> {
         let len = self.page_round(len);
         unsafe {
             let ptr = self::os::map_ring(len)?;
-            Ok(Ring::new(ptr, len))
+            Ok(buf::Buffer::new(ptr, len))
         }
     }
 
-    /// Create an unbound circular buffer with minumum size.
-    pub fn unbound_ring(&self, len: usize) -> Result<UnboundRing> {
+    /// Create a fixed size unbound circular.
+    pub fn ring_buffer(&self, len: usize) -> Result<buf::RingBuffer> {
         let len = self.page_round(len);
         unsafe {
             let ptr = self::os::map_ring(len)?;
-            Ok(UnboundRing::new(ptr, len))
+            Ok(buf::RingBuffer::new(ptr, len))
         }
     }
 }

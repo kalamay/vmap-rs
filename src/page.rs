@@ -70,6 +70,10 @@ impl Page {
         Self { base: PageMut::new(ptr, len) }
     }
 
+    pub fn as_ptr(&self) -> *const u8 { self.base.as_ptr() }
+    pub fn len(&self) -> usize { self.base.len() }
+    pub fn is_empty(&self) -> bool { self.base.is_empty() }
+
     pub fn make_mut(self) -> Result<PageMut> {
         unsafe { protect(self.base.ptr, self.base.len, Protect::ReadWrite) }?;
         Ok(self.base)
@@ -80,16 +84,12 @@ impl Deref for Page {
     type Target = [u8];
 
     #[inline]
-    fn deref(&self) -> &[u8] {
-        self.base.deref()
-    }
+    fn deref(&self) -> &[u8] { self.base.deref() }
 }
 
 impl AsRef<[u8]> for Page {
     #[inline]
-    fn as_ref(&self) -> &[u8] {
-        self.deref()
-    }
+    fn as_ref(&self) -> &[u8] { self.deref() }
 }
 
 impl fmt::Debug for Page {
@@ -115,6 +115,11 @@ impl PageMut {
         Self { ptr: ptr, len: len }
     }
 
+    pub fn as_ptr(&self) -> *const u8 { self.ptr }
+    pub fn as_mut_ptr(&mut self) -> *mut u8 { self.ptr }
+    pub fn len(&self) -> usize { self.len }
+    pub fn is_empty(&self) -> bool { self.len() == 0 }
+
     pub fn make_const(self) -> Result<Page> {
         unsafe { protect(self.ptr, self.len, Protect::ReadOnly) }?;
         Ok(Page { base: self })
@@ -136,7 +141,7 @@ impl Deref for PageMut {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.ptr as *const u8, self.len) }
+        unsafe { slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -149,15 +154,11 @@ impl DerefMut for PageMut {
 
 impl AsRef<[u8]> for PageMut {
     #[inline]
-    fn as_ref(&self) -> &[u8] {
-        self.deref()
-    }
+    fn as_ref(&self) -> &[u8] { self.deref() }
 }
 
 impl AsMut<[u8]> for PageMut {
     #[inline]
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.deref_mut()
-    }
+    fn as_mut(&mut self) -> &mut [u8] { self.deref_mut() }
 }
 

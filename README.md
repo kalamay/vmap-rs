@@ -1,2 +1,2 @@
 # vmap-rs
-Cross-platform virtual memory API for file IO and anonymous ring buffers for Rust
+A cross-platform library for fast and safe memory-mapped IO in Rust
