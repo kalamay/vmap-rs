@@ -88,6 +88,20 @@ pub trait SeqWrite {
 
 
 
+/*
+pub struct BufReader<T: SeqRead, R: Read> {
+    buf: T,
+    src: R,
+}
+
+pub struct BufWriter<T: SeqRead, W: Write> {
+    buf: T,
+    dst: W,
+}
+*/
+
+
+
 #[derive(Debug)]
 pub struct Buffer {
     ptr: *mut u8,
@@ -232,7 +246,7 @@ impl Write for RingBuffer {
 #[cfg(test)]
 mod tests {
     use ::Alloc;
-    use ::buffer::{SeqRead, SeqWrite};
+    use ::buf::{SeqRead, SeqWrite};
     use std::io::{Write, BufRead};
 
     #[test]

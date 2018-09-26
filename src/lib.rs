@@ -96,7 +96,7 @@ pub fn page_size() -> usize {
 ///
 /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
 /// let page = alloc.file_page(&f, 0, 1)?;
-/// assert_eq!(b"use std::fs::File;", &page[..18]);
+/// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
 /// # Ok(())
 /// # }
 /// ```
@@ -237,8 +237,7 @@ impl Alloc {
     /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = alloc.file_page(&f, 0, 1)?;
     /// assert_eq!(page.is_empty(), false);
-    /// assert_eq!(b"use std::fs::File;", &page[..18]);
-    ///
+    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
     /// # Ok(())
     /// # }
     /// ```

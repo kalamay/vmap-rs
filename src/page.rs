@@ -26,8 +26,7 @@ use ::os::{unmap, protect, flush};
 /// let alloc = Alloc::new();
 /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
 /// let page = alloc.file_page(&f, 0, 1)?;
-/// assert_eq!(b"use std::fs::File;", &page[..18]);
-///
+/// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
 /// # Ok(())
 /// # }
 pub struct Page {
@@ -61,8 +60,7 @@ impl Page {
     ///     let ptr = vmap::os::map_file(&f, 0, len, Protect::ReadOnly)?;
     ///     Page::new(ptr, len)
     /// };
-    /// assert_eq!(b"use std::fs::File;", &page[..18]);
-    ///
+    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
     /// # Ok(())
     /// # }
     /// ```
@@ -70,9 +68,9 @@ impl Page {
         Self { base: PageMut::new(ptr, len) }
     }
 
-    pub fn as_ptr(&self) -> *const u8 { self.base.as_ptr() }
-    pub fn len(&self) -> usize { self.base.len() }
-    pub fn is_empty(&self) -> bool { self.base.is_empty() }
+    //pub fn as_ptr(&self) -> *const u8 { self.base.as_ptr() }
+    //pub fn len(&self) -> usize { self.base.len() }
+    //pub fn is_empty(&self) -> bool { self.base.is_empty() }
 
     pub fn make_mut(self) -> Result<PageMut> {
         unsafe { protect(self.base.ptr, self.base.len, Protect::ReadWrite) }?;
@@ -115,10 +113,10 @@ impl PageMut {
         Self { ptr: ptr, len: len }
     }
 
-    pub fn as_ptr(&self) -> *const u8 { self.ptr }
-    pub fn as_mut_ptr(&mut self) -> *mut u8 { self.ptr }
-    pub fn len(&self) -> usize { self.len }
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    //pub fn as_ptr(&self) -> *const u8 { self.ptr }
+    //pub fn as_mut_ptr(&mut self) -> *mut u8 { self.ptr }
+    //pub fn len(&self) -> usize { self.len }
+    //pub fn is_empty(&self) -> bool { self.len() == 0 }
 
     pub fn make_const(self) -> Result<Page> {
         unsafe { protect(self.ptr, self.len, Protect::ReadOnly) }?;
@@ -161,4 +159,20 @@ impl AsMut<[u8]> for PageMut {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] { self.deref_mut() }
 }
+
+
+/*
+/// Get a block from a page
+/// Block borrows page so only one block at a time
+/// Maybe use a base "Ptr" struct and have traits for access?
+pub struct Block {
+    base: BlockMut
+}
+
+pub struct BlockMut {
+    page: PageMut,
+    ptr: *mut u8,
+    len: usize,
+}
+*/
 
