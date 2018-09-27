@@ -177,11 +177,12 @@ impl MapMut {
         Ok(Self::from_ptr(ptr, length))
     }
 
+    /// Create a new private map object from a range of a file.
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
         Self { ptr: ptr, len: len }
     }
 
-    pub fn make_const(self) -> Result<Map> {
+    pub fn make_read_only(self) -> Result<Map> {
         unsafe {
             let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
             protect(ptr, len, Protect::ReadWrite)?;

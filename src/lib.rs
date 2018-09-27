@@ -40,7 +40,7 @@
 //! }
 //!
 //! // Move the MapMut back into a Map
-//! let map = map.make_const()?;
+//! let map = map.make_read_only()?;
 //! assert_eq!(b"that is a test", &map[..]);
 //! # Ok(())
 //! # }
