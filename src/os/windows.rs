@@ -46,8 +46,7 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
     prot, 0, 0, ptr::null());
     if map.is_null() {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         let pg = MapViewOfFile(map, acc,
                                (off >> 16 >> 16) as DWORD,
                                (off & 0xffffffff) as DWORD,

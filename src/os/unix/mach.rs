@@ -158,8 +158,7 @@ pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     if ret != KERN_SUCCESS {
         Err(Error::new(ErrorKind::Other,
                        MachError::new(ret, "failed to deallocate full region")))
-    }
-    else {
+    } else {
         Ok(())
     }
 }

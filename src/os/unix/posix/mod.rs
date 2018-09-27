@@ -54,8 +54,7 @@ fn map(pg: *mut u8, len: usize, flags: c_int, fd: c_int) -> Result<*mut u8> {
         let pg = mmap(pg as *mut c_void, len, PROT_READ|PROT_WRITE, flags, fd, 0);
         if pg == MAP_FAILED {
             Err(Error::last_os_error())
-        }
-        else {
+        } else {
             Ok(pg as *mut u8)
         }
     }
@@ -73,8 +72,7 @@ fn tmp_open(size: usize) -> Result<c_int> {
             let err = Error::last_os_error();
             close(fd);
             Err(err)
-        }
-        else {
+        } else {
             Ok(fd)
         }
     }

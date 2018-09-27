@@ -31,8 +31,7 @@ pub struct Map {
 fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     if f.metadata()?.len() < (off+len) as u64 {
         Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
-    }
-    else {
+    } else {
         unsafe { file_unchecked(f, off, len, prot) }
     }
 }

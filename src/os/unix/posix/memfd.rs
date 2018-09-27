@@ -13,8 +13,7 @@ pub fn memfd_open() -> Result<c_int> {
     };
     if fd < 0 {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         Ok(fd as c_int)
     }
 }

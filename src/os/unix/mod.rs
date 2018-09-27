@@ -36,8 +36,7 @@ pub fn page_size() -> usize {
 fn result(pg: *mut c_void) -> Result<*mut u8> {
     if pg == MAP_FAILED {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         Ok(pg as *mut u8)
     }
 }
@@ -61,8 +60,7 @@ pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
 pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
     if munmap(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         Ok(())
     }
 }
@@ -76,8 +74,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         Ok(())
     }
 }
@@ -90,8 +87,7 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
     };
     if msync(pg as *mut c_void, len, flags) < 0 {
         Err(Error::last_os_error())
-    }
-    else {
+    } else {
         Ok(())
     }
 }
