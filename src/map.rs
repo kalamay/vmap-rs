@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
-use ::{PageSize, Pgno, Protect, Flush};
+use ::{PageSize, Protect, Flush};
 use ::os::{map_file, unmap, protect, flush};
 
 
@@ -20,7 +20,7 @@ use ::os::{map_file, unmap, protect, flush};
 ///
 /// # fn main() -> std::io::Result<()> {
 /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
-/// let page = Map::file_page(&file, 0, 1)?;
+/// let page = Map::file(&file, 0, 256)?;
 /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
 /// # Ok(())
 /// # }
@@ -28,63 +28,49 @@ pub struct Map {
     base: MapMut,
 }
 
+unsafe fn file_checked(f: &File, offset: usize, length: usize, prot: Protect) -> Result<*mut u8> {
+    if f.metadata()?.len() < (offset+length) as u64 {
+        Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
+    }
+    else {
+        file_unchecked(f, offset, length, prot)
+    }
+}
+
+unsafe fn file_unchecked(f: &File, offset: usize, length: usize, prot: Protect) -> Result<*mut u8> {
+    let sz = PageSize::new();
+    let roff = sz.truncate(offset);
+    let rlen = sz.round(length + (offset - roff));
+    let ptr = map_file(f, roff, rlen, prot)?;
+    Ok(ptr.offset((offset - roff) as isize))
+}
+
 impl Map {
-    pub fn file(file: &File, offset: usize, length: usize) -> Result<Self> {
-        if file.metadata()?.len() < (offset+length) as u64 {
-            Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
-        }
-        else {
-            let sz = PageSize::new();
-            let roff = sz.truncate(offset);
-            let rlen = sz.round(length + (offset - roff));
-            unsafe {
-                let ptr = map_file(file, roff, rlen, Protect::ReadOnly)?;
-                Ok(Self::from_ptr(ptr.offset((offset - roff) as isize), length))
-            }
-        }
-    }
-
-    pub unsafe fn file_unchecked(file: &File, offset: usize, length: usize) -> Result<Self> {
-        let sz = PageSize::new();
-        let roff = sz.truncate(offset);
-        let rlen = sz.round(length + (offset - roff));
-        let ptr = map_file(file, roff, rlen, Protect::ReadOnly)?;
-        Ok(Self::from_ptr(ptr.offset((offset - roff) as isize), length))
-    }
-
-    /// Create a new map object from a m range of a file.
+    /// Create a new map object from a range of a file.
     ///
     /// # Example
     ///
     /// ```
     /// # extern crate vmap;
     /// use std::fs::OpenOptions;
+    /// use vmap::Map;
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
-    /// let page = vmap::Map::file_page(&file, 0, 1)?;
-    /// assert_eq!(page.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
+    /// let map = Map::file(&file, 0, 256)?;
+    /// assert_eq!(map.is_empty(), false);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[33..63]);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn file_page(file: &File, no: Pgno, count: Pgno) -> Result<Self> {
-        let sz = PageSize::new();
-        let off = sz.size(no);
-        let len = sz.size(count);
-        if file.metadata()?.len() < (off+len) as u64 {
-            Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
-        }
-        else {
-            unsafe {
-                let ptr = map_file(file, off, len, Protect::ReadOnly)?;
-                Ok(Self::from_ptr(ptr, len))
-            }
+    pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
+        unsafe {
+            let ptr = file_checked(f, offset, length, Protect::ReadOnly)?;
+            Ok(Self::from_ptr(ptr, length))
         }
     }
 
-    /// Create a new map object from a page range of a file without bounds
-    /// checking.
+    /// Create a new map object from a range of a file without bounds checking.
     ///
     /// # Safety
     ///
@@ -93,12 +79,9 @@ impl Map {
     /// 1. When the range is already known to be valid.
     /// 2. When a valid sub-range is known and not exceeded.
     /// 3. When the range will become valid and is not used until then.
-    pub unsafe fn file_page_unchecked(file: &File, no: Pgno, count: Pgno) -> Result<Self> {
-        let sz = PageSize::new();
-        let off = sz.size(no);
-        let len = sz.size(count);
-        let ptr = map_file(file, off, len, Protect::ReadOnly)?;
-        Ok(Self::from_ptr(ptr, len))
+    pub unsafe fn file_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
+        let ptr = file_unchecked(f, offset, length, Protect::ReadOnly)?;
+        Ok(Self::from_ptr(ptr, length))
     }
 
     /// Constructs a new page sequence from an existing mapping.
@@ -175,25 +158,16 @@ pub struct MapMut {
 }
 
 impl MapMut {
-    /// Create a new mutable page object mapped from a range of a file.
-    pub fn file_page(file: &File, no: Pgno, count: Pgno) -> Result<Self> {
-        let sz = PageSize::new();
-        let off = sz.size(no);
-        let len = sz.size(count);
-        if file.metadata()?.len() < (off+len) as u64 {
-            Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
-        }
-        else {
-            unsafe {
-                let ptr = map_file(file, off, len, Protect::ReadWrite)?;
-                Ok(Self::from_ptr(ptr, len))
-            }
+    /// Create a new mutable map object from a range of a file.
+    pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
+        unsafe {
+            let ptr = file_checked(f, offset, length, Protect::ReadWrite)?;
+            Ok(Self::from_ptr(ptr, length))
         }
     }
 
-    /// Create a new mutable page object mapped from a range of a file.
-    /// Create a new mutable page object mapped from a range of a file
-    /// without bounds checking.
+    /// Create a new mutable map object from a range of a file without bounds
+    /// checking.
     ///
     /// # Safety
     ///
@@ -202,12 +176,9 @@ impl MapMut {
     /// 1. When the range is already known to be valid.
     /// 2. When a valid sub-range is known and not exceeded.
     /// 3. When the range will become valid and is not used until then.
-    pub unsafe fn file_page_unchecked(file: &File, no: Pgno, count: Pgno) -> Result<Self> {
-        let sz = PageSize::new();
-        let off = sz.size(no);
-        let len = sz.size(count);
-        let ptr = map_file(file, off, len, Protect::ReadWrite)?;
-        Ok(Self::from_ptr(ptr, len))
+    pub unsafe fn file_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
+        let ptr = file_unchecked(f, offset, length, Protect::ReadWrite)?;
+        Ok(Self::from_ptr(ptr, length))
     }
 
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {

@@ -76,7 +76,9 @@ pub enum Protect {
     /// The page(s) may only be read from.
     ReadOnly,
     /// The page(s) may be read from and written to.
-    ReadWrite
+    ReadWrite,
+    /// Like `ReadWrite`, but changes are not shared.
+    ReadCopy,
 }
 
 /// Desired behavior when flushing write changes.

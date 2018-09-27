@@ -30,6 +30,7 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ|FILE_MAP_WRITE),
+        Protect::ReadCopy => (PAGE_READ_WRITE|PAGE_WRITECOPY, FILE_MAP_READ|FILE_MAP_COPY),
     };
 
     let map = CreateFileMappingW(file.as_raw_handle(), ptr::null_mut(),
@@ -108,6 +109,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     let prot = match prot {
         Protect::ReadOnly => PAGE_READONLY,
         Protect::ReadWrite => PAGE_READWRITE,
+        Protect::ReadCopy => PAGE_READWRITE,
     };
     let mut old = 0;
     if VirtualProtect(pg, len, p, &mut old) != 0 {

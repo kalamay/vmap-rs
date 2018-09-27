@@ -10,7 +10,8 @@ use std::os::unix::io::{AsRawFd};
 use self::libc::{
     c_void, off_t,
     mmap, munmap, mprotect, msync, sysconf,
-    PROT_READ, PROT_WRITE, MAP_SHARED, MAP_FAILED, MS_SYNC, MS_ASYNC, _SC_PAGESIZE
+    PROT_READ, PROT_WRITE, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
+    MS_SYNC, MS_ASYNC, _SC_PAGESIZE
 };
 
 // For macOS and iOS we use the mach vm system for rings. The posix module
@@ -34,11 +35,12 @@ pub fn page_size() -> usize {
 
 /// Memory maps a given range of a file.
 pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    let prot = match prot {
-        Protect::ReadOnly => PROT_READ,
-        Protect::ReadWrite => PROT_READ|PROT_WRITE,
+    let (prot, flags) = match prot {
+        Protect::ReadOnly => (PROT_READ, MAP_SHARED),
+        Protect::ReadWrite => (PROT_READ|PROT_WRITE, MAP_SHARED),
+        Protect::ReadCopy => (PROT_READ|PROT_WRITE, MAP_PRIVATE),
     };
-    let pg = mmap(ptr::null_mut(), len, prot, MAP_SHARED, file.as_raw_fd(), off as off_t);
+    let pg = mmap(ptr::null_mut(), len, prot, flags, file.as_raw_fd(), off as off_t);
     if pg == MAP_FAILED {
         Err(Error::last_os_error())
     }
@@ -62,6 +64,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     let prot = match prot {
         Protect::ReadOnly => PROT_READ,
         Protect::ReadWrite => PROT_READ|PROT_WRITE,
+        Protect::ReadCopy => PROT_READ|PROT_WRITE,
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
         Err(Error::last_os_error())
