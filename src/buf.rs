@@ -5,11 +5,12 @@
 //! utilizing circular address mappinng. The circular mapping ensures that
 //! the entire readable or writable slice may always be addressed as a single,
 //! contiguous allocation. However, these two types differ in one key way:
-//! the [`Buffer`](struct.Buffer.html) may only writen to as readable space
+//! the [`Buffer`](struct.Buffer.html) may only written to as readable space
 //! is consumed, whereas the [`RingBuffer`](struct.RingBuffer.html) is always
 //! writable and will overwrite unconsumed space as needed.
 
-use ::os::unmap_ring;
+use ::PageSize;
+use ::os::{map_ring, unmap_ring};
 
 use std;
 use std::slice;
@@ -111,8 +112,12 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub unsafe fn new(ptr: *mut u8, len: usize) -> Self {
-        Buffer { ptr: ptr, len: len, rpos: 0, wpos: 0 }
+    pub fn new(len: usize) -> Result<Self> {
+        let len = PageSize::new().round(len);
+        unsafe {
+            let ptr = map_ring(len)?;
+            Ok(Self { ptr: ptr, len: len, rpos: 0, wpos: 0 })
+        }
     }
 
     pub fn capacity(&self) -> usize { self.len }
@@ -174,8 +179,12 @@ pub struct RingBuffer {
 }
 
 impl RingBuffer {
-    pub unsafe fn new(ptr: *mut u8, len: usize) -> Self {
-        RingBuffer { ptr: ptr, len: len, rlen: 0, wpos: 0 }
+    pub fn new(len: usize) -> Result<Self> {
+        let len = PageSize::new().round(len);
+        unsafe {
+            let ptr = map_ring(len)?;
+            Ok(Self { ptr: ptr, len: len, rlen: 0, wpos: 0 })
+        }
     }
 
     pub fn capacity(&self) -> usize { self.len }
@@ -245,29 +254,27 @@ impl Write for RingBuffer {
 
 #[cfg(test)]
 mod tests {
-    use ::Alloc;
-    use ::buf::{SeqRead, SeqWrite};
+    use super::{PageSize, Buffer, RingBuffer, SeqRead, SeqWrite};
     use std::io::{Write, BufRead};
 
     #[test]
     fn size() {
-        let alloc = Alloc::new();
-        let mut buf = alloc.buffer(1000).expect("failed to create buffer");
-        assert_eq!(buf.capacity(), alloc.page_size(1));
+        let sz = PageSize::new();
+        let mut buf = Buffer::new(1000).expect("failed to create buffer");
+        assert_eq!(buf.capacity(), sz.size(1));
         assert_eq!(buf.read_len(), 0);
-        assert_eq!(buf.write_len(), alloc.page_size(1));
+        assert_eq!(buf.write_len(), sz.size(1));
 
         let bytes = String::from("test").into_bytes();
         buf.write_all(&bytes).expect("failed to write all bytes");
-        assert_eq!(buf.capacity(), alloc.page_size(1));
+        assert_eq!(buf.capacity(), sz.size(1));
         assert_eq!(buf.read_len(), 4);
-        assert_eq!(buf.write_len(), alloc.page_size(1) - 4);
+        assert_eq!(buf.write_len(), sz.size(1) - 4);
     }
 
     #[test]
     fn wrap() {
-        let alloc = Alloc::new();
-        let mut buf = alloc.buffer(1000).expect("failed to create ring buffer");
+        let mut buf = Buffer::new(1000).expect("failed to create ring buffer");
         // pick some bytes that won't fit evenly in the capacity
         let bytes = b"anthropomorphologically";
         let n = buf.capacity() / bytes.len();
@@ -286,8 +293,7 @@ mod tests {
 
     #[test]
     fn overwrite() {
-        let alloc = Alloc::new();
-        let mut ring = alloc.ring_buffer(1000).expect("failed to create ring");
+        let mut ring = RingBuffer::new(1000).expect("failed to create ring");
         // pick some bytes that won't fit evenly in the capacity
         let bytes = b"anthropomorphologically";
         let n = 2*ring.capacity() / bytes.len() + 1;

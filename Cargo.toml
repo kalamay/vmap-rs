@@ -11,3 +11,6 @@ rand = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }
+
+[dev-dependencies]
+tempdir = "0.3"

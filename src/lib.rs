@@ -7,12 +7,48 @@
 //!
 //! Additionally, a variety of buffer implementations are provided in the
 //! [`vmap::buf`](buf/index.html) module.
+//!
+//! # Example
+//!
+//! ```
+//! # extern crate vmap;
+//! # extern crate tempdir;
+//! #
+//! use vmap::Map;
+//! use std::fs::OpenOptions;
+//! use std::path::PathBuf;
+//! # use std::fs;
+//! # use std::io::Write;
+//!
+//! # fn main() -> std::io::Result<()> {
+//! # let tmp = tempdir::TempDir::new("vmap")?;
+//! let path: PathBuf = /* path to file */
+//! # tmp.path().join("example");
+//! # fs::write(&path, b"this is a test")?;
+//! let file = OpenOptions::new().read(true).write(true).open(&path)?;
+//!
+//! // Map the beginning of the file
+//! let map = Map::file(&file, 0, 14)?;
+//! assert_eq!(b"this is a test", &map[..]);
+//!
+//! // Move the Map into a MapMut
+//! // ... we could have started with MapMut::file(...)
+//! let mut map = map.make_mut()?;
+//! {
+//!     let mut data = &mut map[..];
+//!     data.write_all(b"that")?;
+//! }
+//!
+//! // Move the MapMut back into a Map
+//! let map = map.make_const()?;
+//! assert_eq!(b"that is a test", &map[..]);
+//! # Ok(())
+//! # }
+//! ```
 
 //#![deny(missing_docs)]
 
-use std::fs::File;
-use std::io::{Result, Error, ErrorKind};
-use std::sync::{Once, ONCE_INIT};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Low-level cross-platform virtual memory functions
 pub mod os {
@@ -27,8 +63,8 @@ pub mod os {
     pub use self::windows::*;
 }
 
-mod page;
-pub use self::page::{Page, PageMut};
+mod map;
+pub use self::map::{Map, MapMut};
 
 pub mod buf;
 
@@ -53,68 +89,58 @@ pub enum Flush {
     Async,
 }
 
-static mut SIZE:usize = 0;
-static INIT: Once = ONCE_INIT;
 
 /// Gets a cached version of the system page size.
 ///
 /// ```
 /// # extern crate vmap;
-/// let size = vmap::page_size();
-/// println!("the system page size is {} bytes", size);
+/// let sys = vmap::page_size();
+/// println!("the system page size is {} bytes", sys);
 /// ```
 pub fn page_size() -> usize {
-    unsafe {
-        INIT.call_once(|| {
-            SIZE = self::os::page_size();
-        });
-        SIZE
+    static SIZE_ATOMIC : AtomicUsize = AtomicUsize::new(0);
+    let mut size: usize = SIZE_ATOMIC.load(Ordering::Relaxed);
+    if size == 0 {
+        size = ::os::page_size();
+        SIZE_ATOMIC.store(size, Ordering::Relaxed);
     }
+    size
 }
 
-/// Type for allocating anonymous and file-backed virtual memory.
-///
-/// The construction of this object is very cheap, as it does not track
-/// any of the allocations. That is handled through the Drop implementation.
-/// This serves as an entry point for safe allocation sizes. Virtual memory
-/// is restricted to allocations at page boundaries, so this type handles
-/// adjustements when impropoer boundaries are used.
-///
-/// This type can also be used for convenient page size calculations.
+
+
+/// Type for calculation page size information.
 ///
 /// # Example
 ///
 /// ```
 /// # extern crate vmap;
-/// use vmap::Alloc;
-/// use std::fs::OpenOptions;
-///
-/// # fn main() -> std::io::Result<()> {
-/// let alloc = Alloc::new();
-/// let pages = alloc.page_count(200);
+/// let pg = vmap::PageSize::new();
+/// let pages = pg.count(200);
 /// assert_eq!(pages, 1);
 ///
-/// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
-/// let page = alloc.file_page(&f, 0, 1)?;
-/// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
-/// # Ok(())
-/// # }
+/// let round = pg.round(200);
+/// println!("200 bytes requires a {} byte mapping", round);
+///
+/// let count = pg.count(10000);
+/// println!("10000 bytes requires {} pages", count);
+///
+/// let size = pg.size(3);
+/// println!("3 pages are {} bytes", size);
 /// ```
 #[derive(Copy, Clone)]
-pub struct Alloc {
-    sizem: usize,
-    shift: u32,
+pub struct PageSize {
+    size: usize
 }
 
-impl Alloc {
+impl PageSize {
     /// Creates a type for calculating page numbers and byte offsets.
     ///
     /// The size is determined from the system's configurated page size.
-    /// While the call to get this value is cached, it is preferrable to
-    /// reuse the Alloc instance when possible.
+    /// This value is cached making it very cheap to construct.
     #[inline]
     pub fn new() -> Self {
-        unsafe { Self::new_size(page_size()) }
+        unsafe { Self::with_size(page_size()) }
     }
 
     /// Creates a type for calculating page numbers and byte offsets using a
@@ -130,18 +156,15 @@ impl Alloc {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use vmap::Alloc;
+    /// use vmap::PageSize;
     ///
-    /// let size = vmap::page_size();
-    /// let alloc = unsafe { Alloc::new_size(size << 2) };
-    /// assert_eq!(alloc.page_round(1), size << 2);   // probably 16384
+    /// let sys = vmap::page_size();
+    /// let size = unsafe { PageSize::with_size(sys << 2) };
+    /// assert_eq!(size.round(1), sys << 2);   // probably 16384
     /// ```
     #[inline]
-    pub unsafe fn new_size(size: usize) -> Self {
-        Self {
-            sizem: size - 1,
-            shift: size.trailing_zeros()
-        }
+    pub unsafe fn with_size(size: usize) -> Self {
+        Self { size: size }
     }
 
     /// Round a byte size up to the nearest page size.
@@ -149,19 +172,19 @@ impl Alloc {
     /// # Example
     ///
     /// ```
-    /// use vmap::Alloc;
+    /// use vmap::PageSize;
     ///
-    /// let alloc = Alloc::new();
-    /// let size = vmap::page_size();
-    /// assert_eq!(alloc.page_round(0), 0);
-    /// assert_eq!(alloc.page_round(1), size);        // probably 4096
-    /// assert_eq!(alloc.page_round(size-1), size);   // probably 4096
-    /// assert_eq!(alloc.page_round(size), size);     // probably 4096
-    /// assert_eq!(alloc.page_round(size+1), size*2); // probably 8192
+    /// let sys = vmap::page_size();
+    /// let size = PageSize::new();
+    /// assert_eq!(size.round(0), 0);
+    /// assert_eq!(size.round(1), sys);       // probably 4096
+    /// assert_eq!(size.round(sys-1), sys);   // probably 4096
+    /// assert_eq!(size.round(sys), sys);     // probably 4096
+    /// assert_eq!(size.round(sys+1), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn page_round(&self, len: usize) -> usize {
-        self.page_truncate(len + self.sizem)
+    pub fn round(&self, len: usize) -> usize {
+        self.truncate(len + self.size - 1)
     }
 
     /// Round a byte size down to the nearest page size.
@@ -169,19 +192,46 @@ impl Alloc {
     /// # Example
     ///
     /// ```
-    /// use vmap::Alloc;
+    /// use vmap::PageSize;
     ///
-    /// let alloc = Alloc::new();
-    /// let size = vmap::page_size();
-    /// assert_eq!(alloc.page_truncate(0), 0);
-    /// assert_eq!(alloc.page_truncate(1), 0);
-    /// assert_eq!(alloc.page_truncate(size-1), 0);
-    /// assert_eq!(alloc.page_truncate(size), size);   // probably 4096
-    /// assert_eq!(alloc.page_truncate(size+1), size); // probably 4096
+    /// let sys = vmap::page_size();
+    /// let size = PageSize::new();
+    /// assert_eq!(size.truncate(0), 0);
+    /// assert_eq!(size.truncate(1), 0);
+    /// assert_eq!(size.truncate(sys-1), 0);
+    /// assert_eq!(size.truncate(sys), sys);   // probably 4096
+    /// assert_eq!(size.truncate(sys+1), sys); // probably 4096
     /// ```
     #[inline]
-    pub fn page_truncate(&self, len: usize) -> usize {
-        len & !self.sizem
+    pub fn truncate(&self, len: usize) -> usize {
+        len & !(self.size - 1)
+    }
+
+    /// Calculate the byte offset from page containing the position.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use vmap::PageSize;
+    ///
+    /// let sys = vmap::page_size();
+    /// let size = PageSize::new();
+    /// assert_eq!(size.offset(1), 1);
+    /// assert_eq!(size.offset(sys-1), sys-1);
+    /// assert_eq!(size.offset(sys*2 + 123), 123);
+    pub fn offset(&self, len: usize) -> usize {
+        len & (self.size - 1)
+    }
+
+    /// Calculates the page bounds for a pointer and length.
+    ///
+    /// # Safety
+    ///
+    /// There is no verification that the pointer is a mapped page nor that
+    /// the calculated offset may be dereferenced.
+    pub unsafe fn bounds(&self, ptr: *mut u8, len: usize) -> (*mut u8, usize) {
+        let off = self.offset(ptr as usize);
+        (ptr.offset(-(off as isize)), self.round(len + off))
     }
     
     /// Convert a page count into a byte size.
@@ -189,17 +239,17 @@ impl Alloc {
     /// # Example
     ///
     /// ```
-    /// use vmap::Alloc;
+    /// use vmap::PageSize;
     ///
-    /// let alloc = Alloc::new();
-    /// let size = vmap::page_size();
-    /// assert_eq!(alloc.page_size(0), 0);
-    /// assert_eq!(alloc.page_size(1), size);   // probably 4096
-    /// assert_eq!(alloc.page_size(2), size*2); // probably 8192
+    /// let sys = vmap::page_size();
+    /// let size = PageSize::new();
+    /// assert_eq!(size.size(0), 0);
+    /// assert_eq!(size.size(1), sys);   // probably 4096
+    /// assert_eq!(size.size(2), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn page_size(&self, count: Pgno) -> usize {
-        (count as usize) << self.shift
+    pub fn size(&self, count: Pgno) -> usize {
+        (count as usize) << self.size.trailing_zeros()
     }
     
     /// Covert a byte size into the number of pages necessary to contain it.
@@ -207,149 +257,49 @@ impl Alloc {
     /// # Example
     ///
     /// ```
-    /// use vmap::Alloc;
+    /// use vmap::PageSize;
     ///
-    /// let alloc = Alloc::new();
-    /// let size = vmap::page_size();
-    /// assert_eq!(alloc.page_count(0), 0);
-    /// assert_eq!(alloc.page_count(1), 1);
-    /// assert_eq!(alloc.page_count(size-1), 1);
-    /// assert_eq!(alloc.page_count(size), 1);
-    /// assert_eq!(alloc.page_count(size+1), 2);
-    /// assert_eq!(alloc.page_count(size*2), 2);
+    /// let sys = vmap::page_size();
+    /// let size = PageSize::new();
+    /// assert_eq!(size.count(0), 0);
+    /// assert_eq!(size.count(1), 1);
+    /// assert_eq!(size.count(sys-1), 1);
+    /// assert_eq!(size.count(sys), 1);
+    /// assert_eq!(size.count(sys+1), 2);
+    /// assert_eq!(size.count(sys*2), 2);
     /// ```
     #[inline]
-    pub fn page_count(&self, len: usize) -> Pgno {
-        (self.page_round(len) >> self.shift) as Pgno
-    }
-
-    /// Create a new page object mapped from a range of a file.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # extern crate vmap;
-    /// use vmap::Alloc;
-    /// use std::fs::OpenOptions;
-    ///
-    /// # fn main() -> std::io::Result<()> {
-    /// let alloc = Alloc::new();
-    /// let f = OpenOptions::new().read(true).open("src/lib.rs")?;
-    /// let page = alloc.file_page(&f, 0, 1)?;
-    /// assert_eq!(page.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub fn file_page(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
-        let off = self.page_size(no);
-        let len = self.page_size(count);
-        if file.metadata()?.len() < (off+len) as u64 {
-            Err(Error::new(ErrorKind::InvalidInput, "page range not in file"))
-        }
-        else {
-            unsafe {
-                let ptr = self::os::map_file(file, off, len, Protect::ReadOnly)?;
-                Ok(Page::new(ptr, len))
-            }
-        }
-    }
-
-    /// Create a new page object mapped from a range of a file without bounds
-    /// checking.
-    ///
-    /// # Safety
-    ///
-    /// This does not verify that the requsted range is valid for the file.
-    /// This can be useful in a few scenarios:
-    /// 1. When the range is already known to be valid.
-    /// 2. When a valid sub-range is known and not exceeded.
-    /// 3. When the range will become valid and is not used until then.
-    pub unsafe fn file_page_unchecked(&self, file: &File, no: Pgno, count: Pgno) -> Result<Page> {
-        let off = self.page_size(no);
-        let len = self.page_size(count);
-        let ptr = self::os::map_file(file, off, len, Protect::ReadOnly)?;
-        Ok(Page::new(ptr, len))
-    }
-
-    /// Create a new mutable page object mapped from a range of a file.
-    pub fn file_page_mut(&self, file: &File, no: Pgno, count: Pgno) -> Result<PageMut> {
-        let off = self.page_size(no);
-        let len = self.page_size(count);
-        if file.metadata()?.len() < (off+len) as u64 {
-            Err(Error::new(ErrorKind::InvalidInput, "page range not in file"))
-        }
-        else {
-            unsafe {
-                let ptr = self::os::map_file(file, off, len, Protect::ReadWrite)?;
-                Ok(PageMut::new(ptr, len))
-            }
-        }
-    }
-
-    /// Create a new mutable page object mapped from a range of a file.
-    /// Create a new mutable page object mapped from a range of a file
-    /// without bounds checking.
-    ///
-    /// # Safety
-    ///
-    /// This does not verify that the requsted range is valid for the file.
-    /// This can be useful in a few scenarios:
-    /// 1. When the range is already known to be valid.
-    /// 2. When a valid sub-range is known and not exceeded.
-    /// 3. When the range will become valid and is not used until then.
-    pub unsafe fn file_page_mut_unchecked(&self, file: &File, no: Pgno, count: Pgno) -> Result<PageMut> {
-        let off = self.page_size(no);
-        let len = self.page_size(count);
-        let ptr = self::os::map_file(file, off, len, Protect::ReadWrite)?;
-        Ok(PageMut::new(ptr, len))
-    }
-
-    /// Create a fixed size buffer.
-    pub fn buffer(&self, len: usize) -> Result<buf::Buffer> {
-        let len = self.page_round(len);
-        unsafe {
-            let ptr = self::os::map_ring(len)?;
-            Ok(buf::Buffer::new(ptr, len))
-        }
-    }
-
-    /// Create a fixed size unbound circular.
-    pub fn ring_buffer(&self, len: usize) -> Result<buf::RingBuffer> {
-        let len = self.page_round(len);
-        unsafe {
-            let ptr = self::os::map_ring(len)?;
-            Ok(buf::RingBuffer::new(ptr, len))
-        }
+    pub fn count(&self, len: usize) -> Pgno {
+        (self.round(len) >> self.size.trailing_zeros()) as Pgno
     }
 }
 
 #[cfg(test)]
-mod test {
-    use super::Alloc;
+mod tests {
+    use super::PageSize;
 
     #[test]
     fn page_size() {
-        let info = unsafe { Alloc::new_size(4096) };
-        assert_eq!(info.page_round(0), 0);
-        assert_eq!(info.page_round(1), 4096);
-        assert_eq!(info.page_round(4095), 4096);
-        assert_eq!(info.page_round(4096), 4096);
-        assert_eq!(info.page_round(4097), 8192);
-        assert_eq!(info.page_truncate(0), 0);
-        assert_eq!(info.page_truncate(1), 0);
-        assert_eq!(info.page_truncate(4095), 0);
-        assert_eq!(info.page_truncate(4096), 4096);
-        assert_eq!(info.page_truncate(4097), 4096);
-        assert_eq!(info.page_size(0), 0);
-        assert_eq!(info.page_size(1), 4096);
-        assert_eq!(info.page_size(2), 8192);
-        assert_eq!(info.page_count(0), 0);
-        assert_eq!(info.page_count(1), 1);
-        assert_eq!(info.page_count(4095), 1);
-        assert_eq!(info.page_count(4096), 1);
-        assert_eq!(info.page_count(4097), 2);
-        assert_eq!(info.page_count(8192), 2);
+        let sz = unsafe { PageSize::with_size(4096) };
+        assert_eq!(sz.round(0), 0);
+        assert_eq!(sz.round(1), 4096);
+        assert_eq!(sz.round(4095), 4096);
+        assert_eq!(sz.round(4096), 4096);
+        assert_eq!(sz.round(4097), 8192);
+        assert_eq!(sz.truncate(0), 0);
+        assert_eq!(sz.truncate(1), 0);
+        assert_eq!(sz.truncate(4095), 0);
+        assert_eq!(sz.truncate(4096), 4096);
+        assert_eq!(sz.truncate(4097), 4096);
+        assert_eq!(sz.size(0), 0);
+        assert_eq!(sz.size(1), 4096);
+        assert_eq!(sz.size(2), 8192);
+        assert_eq!(sz.count(0), 0);
+        assert_eq!(sz.count(1), 1);
+        assert_eq!(sz.count(4095), 1);
+        assert_eq!(sz.count(4096), 1);
+        assert_eq!(sz.count(4097), 2);
+        assert_eq!(sz.count(8192), 2);
     }
 }
 
