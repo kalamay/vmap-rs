@@ -193,10 +193,10 @@ impl MapMut {
         Ok(Map { base: self })
     }
 
-    pub fn flush(&self, mode: Flush) -> Result<()> {
+    pub fn flush(&self, file: &File, mode: Flush) -> Result<()> {
         unsafe {
             let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
-            flush(ptr, len, mode)
+            flush(ptr, file, len, mode)
         }
     }
 }

@@ -120,12 +120,13 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
 }
 
 /// Writes modified whole pages back to the filesystem.
-pub unsafe fn flush(pg: *mut u8, len: usize, _mode: Flush) -> Result<()> {
+pub unsafe fn flush(pg: *mut u8, file: &File, len: usize, mode: Flush) -> Result<()> {
     if FlushViewOfFile(pg, len as SIZE_T) != 0 {
-        Err(Error::last_os_error())
+        return Err(Error::last_os_error());
     }
-    else {
-        Ok(())
+    if mode == Flush::Sync && !FlushFileBuffers(file) {
+        return Err(Error::last_os_error());
     }
+    Ok(())
 }
 
