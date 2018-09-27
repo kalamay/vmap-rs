@@ -158,10 +158,8 @@ pub struct MapMut {
 impl MapMut {
     /// Create a new mutable map object from a range of a file.
     pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
-        unsafe {
-            let ptr = file_checked(f, offset, length, Protect::ReadWrite)?;
-            Ok(Self::from_ptr(ptr, length))
-        }
+        let ptr = file_checked(f, offset, length, Protect::ReadWrite)?;
+        Ok(unsafe { Self::from_ptr(ptr, length) })
     }
 
     /// Create a new mutable map object from a range of a file without bounds
