@@ -15,10 +15,10 @@
 //! # extern crate tempdir;
 //! #
 //! use vmap::Map;
+//! use std::io::Write;
 //! use std::fs::OpenOptions;
 //! use std::path::PathBuf;
 //! # use std::fs;
-//! # use std::io::Write;
 //!
 //! # fn main() -> std::io::Result<()> {
 //! # let tmp = tempdir::TempDir::new("vmap")?;

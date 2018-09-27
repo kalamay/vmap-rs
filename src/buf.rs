@@ -112,8 +112,8 @@ pub struct Buffer {
 }
 
 impl Buffer {
-    pub fn new(len: usize) -> Result<Self> {
-        let len = PageSize::new().round(len);
+    pub fn new(hint: usize) -> Result<Self> {
+        let len = PageSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self { ptr: ptr, len: len, rpos: 0, wpos: 0 })
@@ -179,8 +179,8 @@ pub struct RingBuffer {
 }
 
 impl RingBuffer {
-    pub fn new(len: usize) -> Result<Self> {
-        let len = PageSize::new().round(len);
+    pub fn new(hint: usize) -> Result<Self> {
+        let len = PageSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self { ptr: ptr, len: len, rlen: 0, wpos: 0 })

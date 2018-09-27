@@ -25,6 +25,15 @@ pub fn page_size() -> usize {
     }
 }
 
+unsafe fn result(pg: *mut c_void, map: HANDLE) -> Result<*mut u8> {
+    CloseHandle(map);
+    if pg.is_null() {
+        Err(Error::last_os_error())
+    } else {
+        Ok(ptr as *mut u8)
+    }
+}
+
 /// Memory maps a given range of a file.
 pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, access) = match prot {
@@ -34,7 +43,7 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
     };
 
     let map = CreateFileMappingW(file.as_raw_handle(), ptr::null_mut(),
-                                 prot, 0, 0, ptr::null());
+    prot, 0, 0, ptr::null());
     if map.is_null() {
         Err(Error::last_os_error())
     }
@@ -43,13 +52,23 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
                                (off >> 16 >> 16) as DWORD,
                                (off & 0xffffffff) as DWORD,
                                len as SIZE_T);
-        CloseHandle(map);
+        result(pg, map)
+    }
+}
 
-        if pg.is_null() {
-            Err(Error::last_os_error())
-        } else {
-            Ok(pg as *mut u8)
-        }
+/// Creates an anonymous allocation.
+pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
+    let map = CreateFileMappingA(INVALID_HANDLE_VALUE,
+                                 ptr::null_mut(),
+                                 PAGE_READWRITE,
+                                 full >> 32,
+                                 full & 0xffffffff,
+                                 ptr::null());
+    if map == ptr::null_mut() {
+        Err(Error::last_os_error())
+    } else {
+        let pg = MapViewOfFile(map, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, len);
+        result(pg, map)
     }
 }
 

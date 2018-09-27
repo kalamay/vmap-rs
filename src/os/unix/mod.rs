@@ -10,7 +10,7 @@ use std::os::unix::io::{AsRawFd};
 use self::libc::{
     c_void, off_t,
     mmap, munmap, mprotect, msync, sysconf,
-    PROT_READ, PROT_WRITE, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
+    PROT_READ, PROT_WRITE, MAP_ANON, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
     MS_SYNC, MS_ASYNC, _SC_PAGESIZE
 };
 
@@ -33,6 +33,15 @@ pub fn page_size() -> usize {
     unsafe { sysconf(_SC_PAGESIZE) as usize }
 }
 
+fn result(pg: *mut c_void) -> Result<*mut u8> {
+    if pg == MAP_FAILED {
+        Err(Error::last_os_error())
+    }
+    else {
+        Ok(pg as *mut u8)
+    }
+}
+
 /// Memory maps a given range of a file.
 pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, flags) = match prot {
@@ -40,13 +49,12 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
         Protect::ReadWrite => (PROT_READ|PROT_WRITE, MAP_SHARED),
         Protect::ReadCopy => (PROT_READ|PROT_WRITE, MAP_PRIVATE),
     };
-    let pg = mmap(ptr::null_mut(), len, prot, flags, file.as_raw_fd(), off as off_t);
-    if pg == MAP_FAILED {
-        Err(Error::last_os_error())
-    }
-    else {
-        Ok(pg as *mut u8)
-    }
+    result(mmap(ptr::null_mut(), len, prot, flags, file.as_raw_fd(), off as off_t))
+}
+
+/// Creates an anonymous allocation.
+pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
+    result(mmap(ptr::null_mut(), len, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0))
 }
 
 /// Unmaps a page range from a previos mapping.
@@ -68,7 +76,8 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
         Err(Error::last_os_error())
-    } else {
+    }
+    else {
         Ok(())
     }
 }

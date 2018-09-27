@@ -5,7 +5,7 @@ use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
 use ::{PageSize, Protect, Flush};
-use ::os::{map_file, unmap, protect, flush};
+use ::os::{map_file, map_anon, unmap, protect, flush};
 
 
 
@@ -156,6 +156,34 @@ pub struct MapMut {
 }
 
 impl MapMut {
+    /// Create a new anonymous mapping at least as large as the hint.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use vmap::MapMut;
+    /// use std::io::Write;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let mut map = MapMut::new(200)?;
+    /// {
+    ///     let mut data = &mut map[..];
+    ///     assert!(data.len() >= 200);
+    ///     data.write_all(b"test")?;
+    /// }
+    /// assert_eq!(b"test", &map[..4]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn new(hint: usize) -> Result<Self> {
+        unsafe {
+            let len = PageSize::new().round(hint);
+            let ptr = map_anon(len)?;
+            Ok(Self::from_ptr(ptr, len))
+        }
+    }
+
     /// Create a new mutable map object from a range of a file.
     pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
         let ptr = file_checked(f, offset, length, Protect::ReadWrite)?;
@@ -178,6 +206,53 @@ impl MapMut {
     }
 
     /// Create a new private map object from a range of a file.
+    ///
+    /// Initially, the mapping will be shared with other processes, but writes
+    /// will be kept private.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use vmap::MapMut;
+    /// use std::io::Write;
+    /// use std::fs::OpenOptions;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
+    /// let mut map = MapMut::copy(&file, 33, 30)?;
+    /// assert_eq!(map.is_empty(), false);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[..]);
+    /// {
+    ///     let mut data = &mut map[..];
+    ///     data.write_all(b"slow")?;
+    /// }
+    /// assert_eq!(b"slow and safe memory-mapped IO", &map[..]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn copy(f: &File, offset: usize, length: usize) -> Result<Self> {
+        let ptr = file_checked(f, offset, length, Protect::ReadCopy)?;
+        Ok(unsafe { Self::from_ptr(ptr, length) })
+    }
+
+    /// Create a new private map object from a range of a file without bounds checking.
+    ///
+    /// Initially, the mapping will be shared with other processes, but writes
+    /// will be kept private.
+    ///
+    /// # Safety
+    ///
+    /// This does not verify that the requsted range is valid for the file.
+    /// This can be useful in a few scenarios:
+    /// 1. When the range is already known to be valid.
+    /// 2. When a valid sub-range is known and not exceeded.
+    /// 3. When the range will become valid before any write occurs.
+    pub unsafe fn copy_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
+        let ptr = file_unchecked(f, offset, length, Protect::ReadCopy)?;
+        Ok(Self::from_ptr(ptr, length))
+    }
+
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
         Self { ptr: ptr, len: len }
     }
