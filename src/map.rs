@@ -28,21 +28,21 @@ pub struct Map {
     base: MapMut,
 }
 
-unsafe fn file_checked(f: &File, offset: usize, length: usize, prot: Protect) -> Result<*mut u8> {
-    if f.metadata()?.len() < (offset+length) as u64 {
+fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
+    if f.metadata()?.len() < (off+len) as u64 {
         Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
     }
     else {
-        file_unchecked(f, offset, length, prot)
+        unsafe { file_unchecked(f, off, len, prot) }
     }
 }
 
-unsafe fn file_unchecked(f: &File, offset: usize, length: usize, prot: Protect) -> Result<*mut u8> {
+unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let sz = PageSize::new();
-    let roff = sz.truncate(offset);
-    let rlen = sz.round(length + (offset - roff));
+    let roff = sz.truncate(off);
+    let rlen = sz.round(len + (off - roff));
     let ptr = map_file(f, roff, rlen, prot)?;
-    Ok(ptr.offset((offset - roff) as isize))
+    Ok(ptr.offset((off - roff) as isize))
 }
 
 impl Map {
@@ -64,10 +64,8 @@ impl Map {
     /// # }
     /// ```
     pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
-        unsafe {
-            let ptr = file_checked(f, offset, length, Protect::ReadOnly)?;
-            Ok(Self::from_ptr(ptr, length))
-        }
+        let ptr = file_checked(f, offset, length, Protect::ReadOnly)?;
+        Ok(unsafe { Self::from_ptr(ptr, length) })
     }
 
     /// Create a new map object from a range of a file without bounds checking.
