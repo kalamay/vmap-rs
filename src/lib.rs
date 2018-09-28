@@ -46,7 +46,7 @@
 //! # }
 //! ```
 
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -96,8 +96,7 @@ pub enum Flush {
 ///
 /// ```
 /// # extern crate vmap;
-/// let sys = vmap::page_size();
-/// println!("the system page size is {} bytes", sys);
+/// println!("the system page size is {} bytes", vmap::page_size());
 /// ```
 pub fn page_size() -> usize {
     static SIZE_ATOMIC : AtomicUsize = AtomicUsize::new(0);
@@ -117,17 +116,17 @@ pub fn page_size() -> usize {
 ///
 /// ```
 /// # extern crate vmap;
-/// let pg = vmap::PageSize::new();
-/// let pages = pg.count(200);
+/// let size = vmap::PageSize::new();
+/// let pages = size.count(200);
 /// assert_eq!(pages, 1);
 ///
-/// let round = pg.round(200);
+/// let round = size.round(200);
 /// println!("200 bytes requires a {} byte mapping", round);
 ///
-/// let count = pg.count(10000);
+/// let count = size.count(10000);
 /// println!("10000 bytes requires {} pages", count);
 ///
-/// let size = pg.size(3);
+/// let size = size.size(3);
 /// println!("3 pages are {} bytes", size);
 /// ```
 #[derive(Copy, Clone)]
@@ -221,6 +220,7 @@ impl PageSize {
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
+    /// ```
     pub fn offset(&self, len: usize) -> usize {
         len & (self.size - 1)
     }

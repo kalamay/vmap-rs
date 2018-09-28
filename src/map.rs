@@ -19,11 +19,13 @@ use ::os::{map_file, map_anon, unmap, protect, flush};
 /// use std::fs::OpenOptions;
 ///
 /// # fn main() -> std::io::Result<()> {
-/// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
-/// let page = Map::file(&file, 0, 256)?;
-/// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
+/// let file = OpenOptions::new().read(true).open("README.md")?;
+/// let page = Map::file(&file, 39, 30)?;
+/// assert_eq!(b"fast and safe memory-mapped IO", &page[..]);
+/// assert_eq!(b"safe", &page[9..13]);
 /// # Ok(())
 /// # }
+/// ```
 pub struct Map {
     base: MapMut,
 }
@@ -55,10 +57,13 @@ impl Map {
     /// use vmap::Map;
     ///
     /// # fn main() -> std::io::Result<()> {
-    /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
-    /// let map = Map::file(&file, 0, 256)?;
+    /// let file = OpenOptions::new().read(true).open("README.md")?;
+    /// let map = Map::file(&file, 0, 69)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[33..63]);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    ///
+    /// let map = Map::file(&file, 0, file.metadata()?.len() as usize + 1);
+    /// assert!(map.is_err());
     /// # Ok(())
     /// # }
     /// ```
@@ -76,19 +81,37 @@ impl Map {
     /// 1. When the range is already known to be valid.
     /// 2. When a valid sub-range is known and not exceeded.
     /// 3. When the range will become valid and is not used until then.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use std::fs::OpenOptions;
+    /// use vmap::Map;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let file = OpenOptions::new().read(true).open("README.md")?;
+    /// let map = unsafe {
+    ///     Map::file_unchecked(&file, 0, file.metadata()?.len() as usize + 1)?
+    /// };
+    /// // It is safe read the valid range of the file.
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub unsafe fn file_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
         let ptr = file_unchecked(f, offset, length, Protect::ReadOnly)?;
         Ok(Self::from_ptr(ptr, length))
     }
 
-    /// Constructs a new page sequence from an existing mapping.
+    /// Constructs a new mutable map object from an existing mapped pointer.
     ///
     /// # Safety
     ///
     /// This does not know or care if `ptr` or `len` are valid. That is,
     /// it may be null, not at a proper page boundary, point to a size
-    /// different from `len`, or worse yet, point to properly mapped pointer
-    /// from some other allocation system.
+    /// different from `len`, or worse yet, point to a properly mapped
+    /// pointer from some other allocation system.
     ///
     /// Generally don't use this unless you are entirely sure you are
     /// doing so correctly.
@@ -115,6 +138,42 @@ impl Map {
         Self { base: MapMut::from_ptr(ptr, len) }
     }
 
+    /// Transfer ownership of the map into a mutable map.
+    ///
+    /// This will change the protection of the mapping. If the original file
+    /// was not opened with write permissions, this will error.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// # extern crate tempdir;
+    /// use vmap::Map;
+    /// use std::io::Write;
+    /// use std::fs::OpenOptions;
+    /// use std::path::PathBuf;
+    /// # use std::fs;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("make_mut");
+    /// # fs::write(&path, b"this is a test")?;
+    /// let file = OpenOptions::new().read(true).write(true).open(&path)?;
+    ///
+    /// // Map the beginning of the file
+    /// let map = Map::file(&file, 0, 14)?;
+    /// assert_eq!(b"this is a test", &map[..]);
+    ///
+    /// let mut map = map.make_mut()?;
+    /// {
+    ///     let mut data = &mut map[..];
+    ///     data.write_all(b"that")?;
+    /// }
+    /// assert_eq!(b"that is a test", &map[..]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn make_mut(self) -> Result<MapMut> {
         unsafe {
             let (ptr, len) = PageSize::new().bounds(self.base.ptr, self.base.len);
@@ -252,10 +311,81 @@ impl MapMut {
         Ok(Self::from_ptr(ptr, length))
     }
 
+    /// Constructs a new map object from an existing mapped pointer.
+    ///
+    /// # Safety
+    ///
+    /// This does not know or care if `ptr` or `len` are valid. That is,
+    /// it may be null, not at a proper page boundary, point to a size
+    /// different from `len`, or worse yet, point to a properly mapped
+    /// pointer from some other allocation system.
+    ///
+    /// Generally don't use this unless you are entirely sure you are
+    /// doing so correctly.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// # extern crate tempdir;
+    /// use vmap::{MapMut, Protect};
+    /// use std::fs::{self, OpenOptions};
+    /// use std::path::PathBuf;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("make_mut");
+    /// # fs::write(&path, b"this is a test")?;
+    /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
+    /// let page = unsafe {
+    ///     let len = vmap::page_size();
+    ///     let ptr = vmap::os::map_file(&file, 0, len, Protect::ReadOnly)?;
+    ///     MapMut::from_ptr(ptr, len)
+    /// };
+    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
         Self { ptr: ptr, len: len }
     }
 
+    /// Transfer ownership of the map into a mutable map.
+    ///
+    /// This will change the protection of the mapping. If the original file
+    /// was not opened with write permissions, this will error.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// # extern crate tempdir;
+    /// use vmap::MapMut;
+    /// use std::io::Write;
+    /// use std::fs::OpenOptions;
+    /// use std::path::PathBuf;
+    /// # use std::fs;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("make_mut");
+    /// # fs::write(&path, b"this is a test")?;
+    /// let file = OpenOptions::new().read(true).write(true).open(&path)?;
+    ///
+    /// let mut map = MapMut::file(&file, 0, 14)?;
+    /// assert_eq!(b"this is a test", &map[..]);
+    /// {
+    ///     let mut data = &mut map[..];
+    ///     data.write_all(b"that")?;
+    /// }
+    ///
+    /// let map = map.make_read_only()?;
+    /// assert_eq!(b"that is a test", &map[..]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn make_read_only(self) -> Result<Map> {
         unsafe {
             let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
@@ -264,6 +394,10 @@ impl MapMut {
         Ok(Map { base: self })
     }
 
+    /// Writes modifications back to the filesystem.
+    ///
+    /// Flushes will happen automatically, but this will invoke a flush and
+    /// return any errors with doing so.
     pub fn flush(&self, file: &File, mode: Flush) -> Result<()> {
         unsafe {
             let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
