@@ -33,6 +33,11 @@ pub fn page_size() -> usize {
     unsafe { sysconf(_SC_PAGESIZE) as usize }
 }
 
+/// Requests the allocation granularity from the system.
+pub fn allocation_size() -> usize {
+    page_size()
+}
+
 fn result(pg: *mut c_void) -> Result<*mut u8> {
     if pg == MAP_FAILED {
         Err(Error::last_os_error())

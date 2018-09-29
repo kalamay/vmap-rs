@@ -9,7 +9,7 @@
 //! is consumed, whereas the [`RingBuffer`](struct.RingBuffer.html) is always
 //! writable and will overwrite unconsumed space as needed.
 
-use ::PageSize;
+use ::AllocSize;
 use ::os::{map_ring, unmap_ring};
 
 use std;
@@ -172,7 +172,7 @@ impl Buffer {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = PageSize::new().round(hint);
+        let len = AllocSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self { ptr: ptr, len: len, rpos: 0, wpos: 0 })
@@ -284,7 +284,7 @@ impl RingBuffer {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = PageSize::new().round(hint);
+        let len = AllocSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self { ptr: ptr, len: len, rlen: 0, wpos: 0 })
@@ -359,12 +359,12 @@ impl Write for RingBuffer {
 
 #[cfg(test)]
 mod tests {
-    use super::{PageSize, Buffer, RingBuffer, SeqRead, SeqWrite};
+    use super::{AllocSize, Buffer, RingBuffer, SeqRead, SeqWrite};
     use std::io::{Write, BufRead};
 
     #[test]
     fn size() {
-        let sz = PageSize::new();
+        let sz = AllocSize::new();
         let mut buf = Buffer::new(1000).expect("failed to create buffer");
         assert_eq!(buf.capacity(), sz.size(1));
         assert_eq!(buf.read_len(), 0);

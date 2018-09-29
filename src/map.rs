@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
-use ::{PageSize, Protect, Flush};
+use ::{AllocSize, Protect, Flush};
 use ::os::{map_file, map_anon, unmap, protect, flush};
 
 
@@ -39,7 +39,7 @@ fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut 
 }
 
 unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    let sz = PageSize::new();
+    let sz = AllocSize::new();
     let roff = sz.truncate(off);
     let rlen = sz.round(len + (off - roff));
     let ptr = map_file(f, roff, rlen, prot)?;
@@ -126,7 +126,7 @@ impl Map {
     /// # fn main() -> std::io::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = unsafe {
-    ///     let len = vmap::page_size();
+    ///     let len = vmap::allocation_size();
     ///     let ptr = vmap::os::map_file(&file, 0, len, Protect::ReadOnly)?;
     ///     Map::from_ptr(ptr, len)
     /// };
@@ -176,7 +176,7 @@ impl Map {
     /// ```
     pub fn make_mut(self) -> Result<MapMut> {
         unsafe {
-            let (ptr, len) = PageSize::new().bounds(self.base.ptr, self.base.len);
+            let (ptr, len) = AllocSize::new().bounds(self.base.ptr, self.base.len);
             protect(ptr, len, Protect::ReadWrite)?;
         }
         Ok(self.base)
@@ -236,7 +236,7 @@ impl MapMut {
     /// ```
     pub fn new(hint: usize) -> Result<Self> {
         unsafe {
-            let len = PageSize::new().round(hint);
+            let len = AllocSize::new().round(hint);
             let ptr = map_anon(len)?;
             Ok(Self::from_ptr(ptr, len))
         }
@@ -339,7 +339,7 @@ impl MapMut {
     /// # fs::write(&path, b"this is a test")?;
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = unsafe {
-    ///     let len = vmap::page_size();
+    ///     let len = vmap::allocation_size();
     ///     let ptr = vmap::os::map_file(&file, 0, len, Protect::ReadOnly)?;
     ///     MapMut::from_ptr(ptr, len)
     /// };
@@ -388,7 +388,7 @@ impl MapMut {
     /// ```
     pub fn make_read_only(self) -> Result<Map> {
         unsafe {
-            let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
             protect(ptr, len, Protect::ReadWrite)?;
         }
         Ok(Map { base: self })
@@ -400,7 +400,7 @@ impl MapMut {
     /// return any errors with doing so.
     pub fn flush(&self, file: &File, mode: Flush) -> Result<()> {
         unsafe {
-            let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
             flush(ptr, file, len, mode)
         }
     }
@@ -409,7 +409,7 @@ impl MapMut {
 impl Drop for MapMut {
     fn drop(&mut self) {
         unsafe {
-            let (ptr, len) = PageSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
             unmap(ptr, len).unwrap_or_default();
         }
     }

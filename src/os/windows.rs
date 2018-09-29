@@ -73,7 +73,15 @@ pub fn page_size() -> usize {
     unsafe {
         let mut info: SYSTEM_INFO = mem::uninitialized();
         GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        //info.dwPageSize as usize
+        info.dwPageSize
+    }
+}
+
+/// Requests the allocation granularity from the system.
+pub fn allocation_size() -> usize {
+    unsafe {
+        let mut info: SYSTEM_INFO = mem::uninitialized();
+        GetSystemInfo(&mut info as LPSYSTEM_INFO);
         info.dwAllocationGranularity as usize
     }
 }

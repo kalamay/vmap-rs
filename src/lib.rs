@@ -99,11 +99,30 @@ pub enum Flush {
 /// println!("the system page size is {} bytes", vmap::page_size());
 /// ```
 pub fn page_size() -> usize {
-    static SIZE_ATOMIC : AtomicUsize = AtomicUsize::new(0);
-    let mut size: usize = SIZE_ATOMIC.load(Ordering::Relaxed);
+    static SIZE : AtomicUsize = AtomicUsize::new(0);
+    let mut size: usize = SIZE.load(Ordering::Relaxed);
     if size == 0 {
         size = ::os::page_size();
-        SIZE_ATOMIC.store(size, Ordering::Relaxed);
+        SIZE.store(size, Ordering::Relaxed);
+    }
+    size
+}
+
+/// Gets a cached version of the system allocation granularity size.
+///
+/// On Windows this value is typically 64k. Otherwise it is the same as the
+/// page size.
+///
+/// ```
+/// # extern crate vmap;
+/// println!("the system allocation granularity is {} bytes", vmap::allocation_size());
+/// ```
+pub fn allocation_size() -> usize {
+    static SIZE : AtomicUsize = AtomicUsize::new(0);
+    let mut size: usize = SIZE.load(Ordering::Relaxed);
+    if size == 0 {
+        size = ::os::allocation_size();
+        SIZE.store(size, Ordering::Relaxed);
     }
     size
 }
@@ -116,7 +135,7 @@ pub fn page_size() -> usize {
 ///
 /// ```
 /// # extern crate vmap;
-/// let size = vmap::PageSize::new();
+/// let size = vmap::AllocSize::new();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
 ///
@@ -130,18 +149,18 @@ pub fn page_size() -> usize {
 /// println!("3 pages are {} bytes", size);
 /// ```
 #[derive(Copy, Clone)]
-pub struct PageSize {
+pub struct AllocSize {
     size: usize
 }
 
-impl PageSize {
+impl AllocSize {
     /// Creates a type for calculating page numbers and byte offsets.
     ///
     /// The size is determined from the system's configurated page size.
     /// This value is cached making it very cheap to construct.
     #[inline]
     pub fn new() -> Self {
-        unsafe { Self::with_size(page_size()) }
+        unsafe { Self::with_size(allocation_size()) }
     }
 
     /// Creates a type for calculating page numbers and byte offsets using a
@@ -157,10 +176,10 @@ impl PageSize {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = unsafe { PageSize::with_size(sys << 2) };
+    /// let sys = vmap::allocation_size();
+    /// let size = unsafe { AllocSize::with_size(sys << 2) };
     /// assert_eq!(size.round(1), sys << 2);   // probably 16384
     /// ```
     #[inline]
@@ -173,10 +192,10 @@ impl PageSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = PageSize::new();
+    /// let sys = vmap::allocation_size();
+    /// let size = AllocSize::new();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -193,10 +212,10 @@ impl PageSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = PageSize::new();
+    /// let sys = vmap::allocation_size();
+    /// let size = AllocSize::new();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -213,10 +232,10 @@ impl PageSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = PageSize::new();
+    /// let sys = vmap::allocation_size();
+    /// let size = AllocSize::new();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
@@ -241,10 +260,10 @@ impl PageSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = PageSize::new();
+    /// let sys = vmap::allocation_size();
+    /// let size = AllocSize::new();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
@@ -259,10 +278,10 @@ impl PageSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::PageSize;
+    /// use vmap::AllocSize;
     ///
-    /// let sys = vmap::page_size();
-    /// let size = PageSize::new();
+    /// let sys = vmap::allocation_size();
+    /// let size = AllocSize::new();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -278,11 +297,11 @@ impl PageSize {
 
 #[cfg(test)]
 mod tests {
-    use super::PageSize;
+    use super::AllocSize;
 
     #[test]
-    fn page_size() {
-        let sz = unsafe { PageSize::with_size(4096) };
+    fn allocation_size() {
+        let sz = unsafe { AllocSize::with_size(4096) };
         assert_eq!(sz.round(0), 0);
         assert_eq!(sz.round(1), 4096);
         assert_eq!(sz.round(4095), 4096);
