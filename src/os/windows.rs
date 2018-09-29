@@ -1,36 +1,80 @@
 extern crate winapi;
 
-use crate::{Protect, Flush};
+use std::os::windows::raw::HANDLE;
+use ::{Protect, Flush};
 
 use std::{ptr, mem};
 use std::io::{Result, Error};
 use std::fs::File;
-use std::os::windows::io::{AsRawHandle, RawHandle};
+use std::os::raw::c_void;
+use std::os::windows::io::AsRawHandle;
 
-use winapi::shared::basetsd::SIZE_T;
-use winapi::shared::minwindef::DWORD;
-use winapi::um::handleapi::{CloseHandle,INVALID_HANDLE_VALUE};
-use winapi::um::memoryapi::{
-    CreateFileMappingW, MapViewOfFile, MapViewOfFileEx,UnmapViewOfFile, VirtualProtect, FlushViewOfFile,
-    FILE_MAP_READ, FILE_MAP_WRITE,
+use self::winapi::shared::minwindef::DWORD;
+use self::winapi::shared::basetsd::SIZE_T;
+use self::winapi::um::winnt::{
+    MEM_RESERVE, MEM_RELEASE, PAGE_NOACCESS,
+    PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY
 };
-use winapi::um::winnt::{PAGE_READONLY, PAGE_READWRITE};
+use self::winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO, LPSYSTEM_INFO};
+use self::winapi::um::fileapi::FlushFileBuffers;
+use self::winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+use self::winapi::um::memoryapi::{
+    CreateFileMappingW, MapViewOfFileEx, UnmapViewOfFile, FlushViewOfFile,
+    VirtualAlloc, VirtualFree, VirtualProtect,
+    FILE_MAP_READ, FILE_MAP_WRITE, FILE_MAP_COPY
+};
+
+struct MapHandle {
+    map: HANDLE
+}
+
+impl MapHandle {
+    pub unsafe fn new(file: HANDLE, prot: DWORD, len: usize) -> Result<Self> {
+        let map = CreateFileMappingW(file,
+                                     ptr::null_mut(),
+                                     prot,
+                                     (len >> 32) as DWORD,
+                                     (len & 0xffffffff) as DWORD,
+                                     ptr::null());
+        if map.is_null() {
+            Err(Error::last_os_error())
+        } else {
+            Ok(Self { map })
+        }
+    }
+
+    pub unsafe fn view_ptr(&self, access: DWORD, off: usize, len: usize, at: *mut c_void) -> *mut c_void {
+        MapViewOfFileEx(self.map,
+                        access as DWORD,
+                        (off >> 32) as DWORD,
+                        (off & 0xffffffff) as DWORD,
+                        len as SIZE_T,
+                        at)
+    }
+
+    pub unsafe fn view(&self, access: DWORD, off: usize, len: usize, at: *mut c_void) -> Result<*mut u8> {
+        let pg = self.view_ptr(access, off, len, at);
+        if pg.is_null() {
+            Err(Error::last_os_error())
+        } else {
+            Ok(pg as *mut u8)
+        }
+    }
+}
+
+impl Drop for MapHandle {
+    fn drop(&mut self) {
+        unsafe { CloseHandle(self.map); }
+    }
+}
 
 /// Requests the page size from the system.
 pub fn page_size() -> usize {
     unsafe {
         let mut info: SYSTEM_INFO = mem::uninitialized();
         GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        info.dwPageSize as usize
-    }
-}
-
-unsafe fn result(pg: *mut c_void, map: HANDLE) -> Result<*mut u8> {
-    CloseHandle(map);
-    if pg.is_null() {
-        Err(Error::last_os_error())
-    } else {
-        Ok(ptr as *mut u8)
+        //info.dwPageSize as usize
+        info.dwAllocationGranularity as usize
     }
 }
 
@@ -39,35 +83,37 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ|FILE_MAP_WRITE),
-        Protect::ReadCopy => (PAGE_READ_WRITE|PAGE_WRITECOPY, FILE_MAP_READ|FILE_MAP_COPY),
+        Protect::ReadCopy => (PAGE_READWRITE|PAGE_WRITECOPY, FILE_MAP_READ|FILE_MAP_COPY),
     };
 
-    let map = CreateFileMappingW(file.as_raw_handle(), ptr::null_mut(),
-    prot, 0, 0, ptr::null());
-    if map.is_null() {
-        Err(Error::last_os_error())
-    } else {
-        let pg = MapViewOfFile(map, acc,
-                               (off >> 16 >> 16) as DWORD,
-                               (off & 0xffffffff) as DWORD,
-                               len as SIZE_T);
-        result(pg, map)
-    }
+    let map = MapHandle::new(file.as_raw_handle(), prot, 0)?;
+    map.view(access, off, len, ptr::null_mut())
 }
 
 /// Creates an anonymous allocation.
 pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
-    let map = CreateFileMappingA(INVALID_HANDLE_VALUE,
-                                 ptr::null_mut(),
-                                 PAGE_READWRITE,
-                                 full >> 32,
-                                 full & 0xffffffff,
-                                 ptr::null());
-    if map == ptr::null_mut() {
+    let map = MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, len)?;
+    map.view(FILE_MAP_READ|FILE_MAP_WRITE, 0, len, ptr::null_mut())
+}
+
+unsafe fn reserve(len: usize) -> Result<*mut c_void> {
+    let pg = VirtualAlloc(ptr::null_mut(), len as SIZE_T, MEM_RESERVE, PAGE_NOACCESS);
+    if pg.is_null() {
         Err(Error::last_os_error())
     } else {
-        let pg = MapViewOfFile(map, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, len);
-        result(pg, map)
+        VirtualFree(pg, 0, MEM_RELEASE);
+        Ok(pg)
+    }
+}
+
+unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Result<*mut u8> {
+    let a = map.view(FILE_MAP_READ|FILE_MAP_WRITE, 0, len, pg)?;
+    let b = map.view(FILE_MAP_READ|FILE_MAP_WRITE, 0, len, pg.offset(len as isize));
+    if b.is_err() {
+        UnmapViewOfFile(a as *mut c_void);
+        b
+    } else {
+        Ok(a as *mut u8)
     }
 }
 
@@ -77,39 +123,23 @@ pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
 pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
-    let full = (len * 2) as DWORD;
-    let map = CreateFileMappingA(INVALID_HANDLE_VALUE,
-                                 ptr::null_mut(),
-                                 PAGE_READWRITE,
-                                 full >> 32,
-                                 full & 0xffffffff,
-                                 ptr::null());
-    if map == ptr::null_mut() {
-        return Err(Error::last_os_error());
-    }
+    let full = 2 * len;
+    let map = MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, full)?;
 
-    let a = MapViewOfFile(map, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, len);
-    if a == ptr::null_mut() {
-        let err = Err(Error::last_os_error());
-        CloseHandle(map);
-        return err;
+    let mut n = 0;
+    loop {
+        let pg = reserve(full)?;
+        let rc = map_ring_handle(&map, len, pg);
+        if rc.is_ok() || n == 5 {
+            return rc;
+        }
+        n += 1;
     }
-
-    let b = MapViewOfFileEx(map, FILE_MAP_READ|FILE_MAP_WRITE, 0, 0, len, a.offset(len));
-    if b == ptr::null_mut() {
-        let err = Err(Error::last_os_error());
-        UnmapViewOfFile(a);
-        CloseHandle(map);
-        return err;
-    }
-
-    CloseHandle(map);
-    Ok(a as *mut u8)
 }
 
 /// Unmaps a page range from a previos mapping.
 pub unsafe fn unmap(pg: *mut u8, _len: usize) -> Result<()> {
-    if UnmapViewOfFile(pg) != 0 {
+    if UnmapViewOfFile(pg as *mut c_void) != 0 {
         Err(Error::last_os_error())
     } else {
         Ok(())
@@ -117,9 +147,13 @@ pub unsafe fn unmap(pg: *mut u8, _len: usize) -> Result<()> {
 }
 
 /// Unmaps a ring mapping created by `map_ring`.
-pub unsafe fn unmap_ring(pg: *mut u8, len: usize) {
-    unmap(pg, len)?;
-    unmap(pg.offset(len), len)?;
+pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
+    if UnmapViewOfFile(pg.offset(len as isize) as *mut c_void) == 0 {
+        Err(Error::last_os_error())
+    } else {
+        UnmapViewOfFile(pg as *mut c_void);
+        Ok(())
+    }
 }
 
 /// Changes the protection for a page range.
@@ -130,21 +164,25 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
         Protect::ReadCopy => PAGE_READWRITE,
     };
     let mut old = 0;
-    if VirtualProtect(pg, len, p, &mut old) != 0 {
-        Ok(())
-    } else {
+    if VirtualProtect(pg as *mut c_void, len, prot, &mut old) == 0 {
         Err(Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 
 /// Writes modified whole pages back to the filesystem.
 pub unsafe fn flush(pg: *mut u8, file: &File, len: usize, mode: Flush) -> Result<()> {
-    if FlushViewOfFile(pg, len as SIZE_T) != 0 {
-        return Err(Error::last_os_error());
+    if FlushViewOfFile(pg as *mut c_void, len as SIZE_T) == 0 {
+        return Err(Error::last_os_error())
     }
-    if mode == Flush::Sync && !FlushFileBuffers(file) {
-        return Err(Error::last_os_error());
+    match mode {
+        Flush::Sync => if FlushFileBuffers(file.as_raw_handle()) == 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(())
+        }
+        Flush::Async => Ok(())
     }
-    Ok(())
 }
 
