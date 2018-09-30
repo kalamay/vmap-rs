@@ -149,9 +149,7 @@ pub fn allocation_size() -> usize {
 /// println!("3 pages are {} bytes", size);
 /// ```
 #[derive(Copy, Clone)]
-pub struct AllocSize {
-    size: usize
-}
+pub struct AllocSize(usize);
 
 impl AllocSize {
     /// Creates a type for calculating page numbers and byte offsets.
@@ -184,7 +182,7 @@ impl AllocSize {
     /// ```
     #[inline]
     pub unsafe fn with_size(size: usize) -> Self {
-        Self { size: size }
+        AllocSize(size)
     }
 
     /// Round a byte size up to the nearest page size.
@@ -204,7 +202,7 @@ impl AllocSize {
     /// ```
     #[inline]
     pub fn round(&self, len: usize) -> usize {
-        self.truncate(len + self.size - 1)
+        self.truncate(len + self.0 - 1)
     }
 
     /// Round a byte size down to the nearest page size.
@@ -224,7 +222,7 @@ impl AllocSize {
     /// ```
     #[inline]
     pub fn truncate(&self, len: usize) -> usize {
-        len & !(self.size - 1)
+        len & !(self.0 - 1)
     }
 
     /// Calculate the byte offset from page containing the position.
@@ -241,18 +239,7 @@ impl AllocSize {
     /// assert_eq!(size.offset(sys*2 + 123), 123);
     /// ```
     pub fn offset(&self, len: usize) -> usize {
-        len & (self.size - 1)
-    }
-
-    /// Calculates the page bounds for a pointer and length.
-    ///
-    /// # Safety
-    ///
-    /// There is no verification that the pointer is a mapped page nor that
-    /// the calculated offset may be dereferenced.
-    pub unsafe fn bounds(&self, ptr: *mut u8, len: usize) -> (*mut u8, usize) {
-        let off = self.offset(ptr as usize);
-        (ptr.offset(-(off as isize)), self.round(len + off))
+        len & (self.0 - 1)
     }
     
     /// Convert a page count into a byte size.
@@ -270,7 +257,7 @@ impl AllocSize {
     /// ```
     #[inline]
     pub fn size(&self, count: Pgno) -> usize {
-        (count as usize) << self.size.trailing_zeros()
+        (count as usize) << self.0.trailing_zeros()
     }
     
     /// Covert a byte size into the number of pages necessary to contain it.
@@ -291,7 +278,18 @@ impl AllocSize {
     /// ```
     #[inline]
     pub fn count(&self, len: usize) -> Pgno {
-        (self.round(len) >> self.size.trailing_zeros()) as Pgno
+        (self.round(len) >> self.0.trailing_zeros()) as Pgno
+    }
+
+    /// Calculates the page bounds for a pointer and length.
+    ///
+    /// # Safety
+    ///
+    /// There is no verification that the pointer is a mapped page nor that
+    /// the calculated offset may be dereferenced.
+    pub unsafe fn bounds(&self, ptr: *mut u8, len: usize) -> (*mut u8, usize) {
+        let off = self.offset(ptr as usize);
+        (ptr.offset(-(off as isize)), self.round(len + off))
     }
 }
 
