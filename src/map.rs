@@ -181,6 +181,12 @@ impl Map {
         }
         Ok(self.base)
     }
+
+    /// Get the length of the allocated region.
+    pub fn len(&self) -> usize { return self.base.len() }
+
+    /// Get the pointer to the start of the allocated region.
+    pub fn as_ptr(&self) -> *const u8 { return self.base.as_ptr() }
 }
 
 impl Deref for Map {
@@ -404,6 +410,15 @@ impl MapMut {
             flush(ptr, file, len, mode)
         }
     }
+
+    /// Get the length of the allocated region.
+    pub fn len(&self) -> usize { return self.len }
+
+    /// Get the pointer to the start of the allocated region.
+    pub fn as_ptr(&self) -> *const u8 { return self.ptr }
+
+    /// Get a mutable pointer to the start of the allocated region.
+    pub fn as_mut_ptr(&self) -> *mut u8 { return self.ptr }
 }
 
 impl Drop for MapMut {
