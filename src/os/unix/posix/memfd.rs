@@ -5,6 +5,7 @@ use std::os::raw::c_int;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn memfd_open() -> Result<c_int> {
+    use std::os::raw::c_char;
     const NAME : &[u8] = b"vmap";
     let fd = unsafe {
         libc::syscall(libc::SYS_memfd_create,
