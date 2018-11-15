@@ -53,17 +53,18 @@ impl<R: Read> BufReader<R> {
     /// subsequent read will request more from the inner reader.
     pub fn set_lowat(&mut self, val: usize) { self.lowat = val }
 
-    /// TODO
+    /// Gets a reference to the underlying reader.
     pub fn get_ref(&self) -> &R { &self.inner }
-    /// TODO
+
+    /// Gets a mutable reference to the underlying reader.
     pub fn get_mut(&mut self) -> &mut R { &mut self.inner }
 
-    /// TODO
+    /// Returns a reference to the internally buffered data.
     pub fn buffer(&self) -> &[u8] {
         &self.buf.as_read_slice(std::usize::MAX)
     }
 
-    /// TODO
+    /// Unwraps this `BufReader`, returning the underlying reader.
     pub fn into_inner(self) -> R { self.inner }
 }
 
@@ -146,17 +147,13 @@ impl<W: Write> BufWriter<W> {
         })
     }
 
-    /// TODO
+    /// Gets a reference to the underlying writer.
     pub fn get_ref(&self) -> &W { &self.inner.as_ref().unwrap() }
-    /// TODO
+
+    /// Gets a mutable reference to the underlying writer.
     pub fn get_mut(&mut self) -> &mut W { self.inner.as_mut().unwrap() }
 
-    /// TODO
-    pub fn buffer(&self) -> &[u8] {
-        &self.buf.as_read_slice(std::usize::MAX)
-    }
-
-    /// TODO
+    /// Unwraps this `BufWriter`, returning the underlying writer.
     pub fn into_inner(mut self) -> Result<W> {
         self.flush_buf()?;
         Ok(self.inner.take().unwrap())
