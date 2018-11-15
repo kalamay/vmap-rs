@@ -6,7 +6,7 @@
 //! safe access.
 //!
 //! Additionally, a variety of buffer implementations are provided in the
-//! [`vmap::buf`](buf/index.html) module.
+//! [`vmap::io`](io/index.html) module.
 //!
 //! # Example
 //!
@@ -66,7 +66,7 @@ pub mod os {
 mod map;
 pub use self::map::{Map, MapMut};
 
-pub mod buf;
+pub mod io;
 
 /// Type to represent whole page offsets and counts.
 pub type Pgno = u32;
