@@ -1,6 +1,7 @@
 use std::fmt;
 use std::slice;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::path::Path;
 use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
@@ -48,6 +49,27 @@ unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Res
 }
 
 impl Map {
+    /// Creates a new read-only map object using the full range of a file.
+    ///
+    /// # Example
+    /// ```
+    /// # extern crate vmap;
+    /// use std::fs::OpenOptions;
+    /// use vmap::Map;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let map = Map::open("README.md")?;
+    /// assert_eq!(map.is_empty(), false);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = OpenOptions::new().read(true).open(&path)?;
+        let size = file.metadata()?.len();
+        unsafe { Self::file_unchecked(&file, 0, size as usize) }
+    }
+
     /// Create a new map object from a range of a file.
     ///
     /// # Example
@@ -257,6 +279,27 @@ impl MapMut {
             let ptr = map_anon(len)?;
             Ok(Self::from_ptr(ptr, len))
         }
+    }
+
+    /// Creates a new read/write map object using the full range of a file.
+    ///
+    /// # Example
+    /// ```
+    /// # extern crate vmap;
+    /// use std::fs::OpenOptions;
+    /// use vmap::MapMut;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let map = MapMut::open("README.md")?;
+    /// assert_eq!(map.is_empty(), false);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let file = OpenOptions::new().read(true).write(true).open(&path)?;
+        let size = file.metadata()?.len();
+        unsafe { Self::file_unchecked(&file, 0, size as usize) }
     }
 
     /// Create a new mutable map object from a range of a file.
