@@ -73,7 +73,7 @@ pub fn page_size() -> usize {
     unsafe {
         let mut info: SYSTEM_INFO = mem::uninitialized();
         GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        info.dwPageSize
+        info.dwPageSize as usize
     }
 }
 
@@ -195,7 +195,7 @@ pub unsafe fn flush(pg: *mut u8, file: &File, len: usize, mode: Flush) -> Result
 }
 /// Updates the advise for the page range.
 pub unsafe fn advise(_pg: *mut u8, _len: usize, _access: AdviseAccess, _usage: AdviseUsage) -> Result<()> {
-    Ok()
+    Ok(())
 }
 
 /// Locks physical pages into memory.
