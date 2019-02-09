@@ -9,7 +9,7 @@ use std::os::unix::io::{AsRawFd};
 
 use self::libc::{
     c_void, off_t,
-    mmap, munmap, mprotect, msync, madvise, sysconf,
+    mmap, munmap, mprotect, msync, madvise, mlock, munlock, sysconf,
     PROT_READ, PROT_WRITE, MAP_ANON, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
     MADV_NORMAL, MADV_SEQUENTIAL, MADV_RANDOM, MADV_WILLNEED, MADV_DONTNEED,
     MS_SYNC, MS_ASYNC, _SC_PAGESIZE
@@ -114,6 +114,24 @@ pub unsafe fn advise(pg: *mut u8, len: usize, access: AdviseAccess, usage: Advis
         };
 
     if madvise(pg as *mut c_void, len, adv) < 0 {
+        Err(Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Locks physical pages into memory.
+pub unsafe fn lock(pg: *mut u8, len: usize) -> Result<()> {
+    if mlock(pg as *mut c_void, len) < 0 {
+        Err(Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Unlocks physical pages from memory.
+pub unsafe fn unlock(pg: *mut u8, len: usize) -> Result<()> {
+    if munlock(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error())
     } else {
         Ok(())

@@ -6,7 +6,7 @@ use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
 use ::{AllocSize, Protect, Flush, AdviseAccess, AdviseUsage};
-use ::os::{map_file, map_anon, unmap, protect, flush, advise};
+use ::os::{map_file, map_anon, unmap, protect, flush, advise, lock, unlock};
 
 
 
@@ -219,6 +219,26 @@ impl Map {
     /// Updates the advise for a specific range of the mapped region.
     pub fn advise_range(&self, off: usize, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
         self.base.advise_range(off, len, access, usage)
+    }
+
+    /// Lock all mapped physical pages into memory.
+    pub fn lock(&self) -> Result<()> {
+        self.base.lock()
+    }
+
+    /// Lock a range of physical pages into memory.
+    pub fn lock_range(&self, off: usize, len: usize) -> Result<()> {
+        self.base.lock_range(off, len)
+    }
+
+    /// Unlock all mapped physical pages into memory.
+    pub fn unlock(&self) -> Result<()> {
+        self.base.unlock()
+    }
+
+    /// Unlock a range of physical pages into memory.
+    pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
+        self.base.unlock_range(off, len)
     }
 }
 
@@ -490,6 +510,44 @@ impl MapMut {
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
             advise(ptr, len, access, usage)
+        }
+    }
+
+    /// Lock all mapped physical pages into memory.
+    pub fn lock(&self) -> Result<()> {
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            lock(ptr, len)
+        }
+    }
+
+    /// Lock a range of physical pages into memory.
+    pub fn lock_range(&self, off: usize, len: usize) -> Result<()> {
+        if off + len > self.len {
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+        }
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            lock(ptr, len)
+        }
+    }
+
+    /// Unlock all mapped physical pages into memory.
+    pub fn unlock(&self) -> Result<()> {
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            unlock(ptr, len)
+        }
+    }
+
+    /// Unlock a range of physical pages into memory.
+    pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
+        if off + len > self.len {
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+        }
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            unlock(ptr, len)
         }
     }
 }
