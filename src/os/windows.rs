@@ -1,7 +1,7 @@
 extern crate winapi;
 
 use std::os::windows::raw::HANDLE;
-use ::{Protect, Flush};
+use ::{Protect, Flush, AdviseAccess, AdviseUsage};
 
 use std::{ptr, mem};
 use std::io::{Result, Error};
@@ -192,5 +192,9 @@ pub unsafe fn flush(pg: *mut u8, file: &File, len: usize, mode: Flush) -> Result
         }
         Flush::Async => Ok(())
     }
+}
+/// Updates the advise for the page range.
+pub unsafe fn advise(_pg: *mut u8, _len: usize, _access: AdviseAccess, _usage: AdviseUsage) -> Result<()> {
+    Ok()
 }
 

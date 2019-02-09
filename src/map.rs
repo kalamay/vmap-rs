@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{Result, Error, ErrorKind};
 use std::ops::{Deref, DerefMut};
 
-use ::{AllocSize, Protect, Flush};
-use ::os::{map_file, map_anon, unmap, protect, flush};
+use ::{AllocSize, Protect, Flush, AdviseAccess, AdviseUsage};
+use ::os::{map_file, map_anon, unmap, protect, flush, advise};
 
 
 
@@ -15,12 +15,13 @@ use ::os::{map_file, map_anon, unmap, protect, flush};
 ///
 /// ```
 /// # extern crate vmap;
-/// use vmap::Map;
+/// use vmap::{Map, AdviseAccess, AdviseUsage};
 /// use std::fs::OpenOptions;
 ///
 /// # fn main() -> std::io::Result<()> {
 /// let file = OpenOptions::new().read(true).open("README.md")?;
 /// let page = Map::file(&file, 39, 30)?;
+/// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
 /// assert_eq!(b"fast and safe memory-mapped IO", &page[..]);
 /// assert_eq!(b"safe", &page[9..13]);
 /// # Ok(())
@@ -187,6 +188,16 @@ impl Map {
 
     /// Get the pointer to the start of the allocated region.
     pub fn as_ptr(&self) -> *const u8 { return self.base.as_ptr() }
+
+    /// Updates the advise for the entire mapped region..
+    pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+        self.base.advise(access, usage)
+    }
+
+    /// Updates the advise for a specific range of the mapped region.
+    pub fn advise_range(&self, off: usize, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+        self.base.advise_range(off, len, access, usage)
+    }
 }
 
 impl Deref for Map {
@@ -419,6 +430,25 @@ impl MapMut {
 
     /// Get a mutable pointer to the start of the allocated region.
     pub fn as_mut_ptr(&self) -> *mut u8 { return self.ptr }
+
+    /// Updates the advise for the entire mapped region..
+    pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            advise(ptr, len, access, usage)
+        }
+    }
+
+    /// Updates the advise for a specific range of the mapped region.
+    pub fn advise_range(&self, off: usize, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+        if off + len > self.len {
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+        }
+        unsafe {
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            advise(ptr, len, access, usage)
+        }
+    }
 }
 
 impl Drop for MapMut {

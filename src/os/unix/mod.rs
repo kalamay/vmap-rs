@@ -1,6 +1,6 @@
 extern crate libc;
 
-use ::{Protect, Flush};
+use ::{Protect, Flush, AdviseAccess, AdviseUsage};
 
 use std::ptr;
 use std::io::{Result, Error};
@@ -9,8 +9,9 @@ use std::os::unix::io::{AsRawFd};
 
 use self::libc::{
     c_void, off_t,
-    mmap, munmap, mprotect, msync, sysconf,
+    mmap, munmap, mprotect, msync, madvise, sysconf,
     PROT_READ, PROT_WRITE, MAP_ANON, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
+    MADV_NORMAL, MADV_SEQUENTIAL, MADV_RANDOM, MADV_WILLNEED, MADV_DONTNEED,
     MS_SYNC, MS_ASYNC, _SC_PAGESIZE
 };
 
@@ -91,6 +92,28 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
         Flush::Async => MS_ASYNC,
     };
     if msync(pg as *mut c_void, len, flags) < 0 {
+        Err(Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Updates the advise for the page range.
+pub unsafe fn advise(pg: *mut u8, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+    let adv =
+        match access {
+            AdviseAccess::Normal => MADV_NORMAL,
+            AdviseAccess::Sequential => MADV_SEQUENTIAL,
+            AdviseAccess::Random => MADV_RANDOM,
+        }
+    | 
+        match usage {
+            AdviseUsage::Normal => 0,
+            AdviseUsage::WillNeed => MADV_WILLNEED,
+            AdviseUsage::WillNotNeed => MADV_DONTNEED,
+        };
+
+    if madvise(pg as *mut c_void, len, adv) < 0 {
         Err(Error::last_os_error())
     } else {
         Ok(())

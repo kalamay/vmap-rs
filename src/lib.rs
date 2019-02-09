@@ -91,6 +91,26 @@ pub enum Flush {
     Async,
 }
 
+/// Hint for the access pattern of the underlying mapping.
+pub enum AdviseAccess {
+    /// Use the system default behavior.
+    Normal,
+    /// The map will be accessed in a sequential manner.
+    Sequential,
+    /// The map will be accessed in a random manner.
+    Random
+}
+
+/// Hint for the immediacy of accessing the underlying mapping.
+pub enum AdviseUsage {
+    /// Use the system default behavior.
+    Normal,
+    /// The map is expected to be accessed soon.
+    WillNeed,
+    /// The map is not expected to be accessed soon.
+    WillNotNeed,
+}
+
 
 /// Gets a cached version of the system page size.
 ///
