@@ -1,9 +1,7 @@
 use super::{Ring, SeqRead, SeqWrite};
 
 use std;
-use std::io::{Result, Error, ErrorKind, BufRead, Read, Write};
-
-
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Write};
 
 /// The `BufReader` adds buffering to any reader using a specialized buffer.
 ///
@@ -41,23 +39,35 @@ pub struct BufReader<R> {
 impl<R: Read> BufReader<R> {
     /// Creates a new `BufReader`.
     pub fn new(inner: R, capacity: usize) -> Result<Self> {
-        Ok(Self { buf: Ring::new(capacity)?, inner: inner, lowat: 0 })
+        Ok(Self {
+            buf: Ring::new(capacity)?,
+            inner: inner,
+            lowat: 0,
+        })
     }
 
     /// Get the low-water level.
-    pub fn lowat(&self) -> usize { self.lowat }
+    pub fn lowat(&self) -> usize {
+        self.lowat
+    }
 
     /// Set the low-water level.
     ///
     /// When the internal buffer content length drops to this level, a
     /// subsequent read will request more from the inner reader.
-    pub fn set_lowat(&mut self, val: usize) { self.lowat = val }
+    pub fn set_lowat(&mut self, val: usize) {
+        self.lowat = val
+    }
 
     /// Gets a reference to the underlying reader.
-    pub fn get_ref(&self) -> &R { &self.inner }
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
 
     /// Gets a mutable reference to the underlying reader.
-    pub fn get_mut(&mut self) -> &mut R { &mut self.inner }
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
 
     /// Returns a reference to the internally buffered data.
     pub fn buffer(&self) -> &[u8] {
@@ -65,7 +75,9 @@ impl<R: Read> BufReader<R> {
     }
 
     /// Unwraps this `BufReader`, returning the underlying reader.
-    pub fn into_inner(self) -> R { self.inner }
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
 }
 
 impl<R: Read> Read for BufReader<R> {
@@ -97,8 +109,6 @@ impl<R: Read> BufRead for BufReader<R> {
         self.buf.consume(amt);
     }
 }
-
-
 
 /// The `BufWriter` adds buffering to any writer using a specialized buffer.
 ///
@@ -134,7 +144,7 @@ impl<R: Read> BufRead for BufReader<R> {
 pub struct BufWriter<W: Write> {
     buf: Ring,
     inner: Option<W>,
-    panicked: bool
+    panicked: bool,
 }
 
 impl<W: Write> BufWriter<W> {
@@ -143,15 +153,19 @@ impl<W: Write> BufWriter<W> {
         Ok(Self {
             buf: Ring::new(capacity)?,
             inner: Some(inner),
-            panicked: false
+            panicked: false,
         })
     }
 
     /// Gets a reference to the underlying writer.
-    pub fn get_ref(&self) -> &W { &self.inner.as_ref().unwrap() }
+    pub fn get_ref(&self) -> &W {
+        &self.inner.as_ref().unwrap()
+    }
 
     /// Gets a mutable reference to the underlying writer.
-    pub fn get_mut(&mut self) -> &mut W { self.inner.as_mut().unwrap() }
+    pub fn get_mut(&mut self) -> &mut W {
+        self.inner.as_mut().unwrap()
+    }
 
     /// Unwraps this `BufWriter`, returning the underlying writer.
     pub fn into_inner(mut self) -> Result<W> {
@@ -165,18 +179,27 @@ impl<W: Write> BufWriter<W> {
         let mut ret = Ok(());
         while written < len {
             self.panicked = true;
-            let r = self.inner.as_mut().unwrap().write(self.buf.as_read_slice(std::usize::MAX));
+            let r = self
+                .inner
+                .as_mut()
+                .unwrap()
+                .write(self.buf.as_read_slice(std::usize::MAX));
             self.panicked = false;
 
             match r {
                 Ok(0) => {
-                    ret = Err(Error::new(ErrorKind::WriteZero,
-                                         "failed to write the buffered data"));
+                    ret = Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write the buffered data",
+                    ));
                     break;
                 }
                 Ok(n) => written += n,
                 Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => { ret = Err(e); break }
+                Err(e) => {
+                    ret = Err(e);
+                    break;
+                }
             }
         }
         if written > 0 {

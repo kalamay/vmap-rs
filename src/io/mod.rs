@@ -15,11 +15,9 @@ pub use self::ring::*;
 mod buffer;
 pub use self::buffer::*;
 
-use std::slice;
-use std::io::{Result, BufRead};
 use std::cmp;
-
-
+use std::io::{BufRead, Result};
+use std::slice;
 
 /// Common input trait for all buffers.
 pub trait SeqRead: BufRead {
@@ -34,7 +32,9 @@ pub trait SeqRead: BufRead {
 
     /// Test if all read bytes have been consumed.
     #[inline]
-    fn is_empty(&self) -> bool { self.read_len() == 0 }
+    fn is_empty(&self) -> bool {
+        self.read_len() == 0
+    }
 
     /// Get an immutable slice covering the read region of the buffer.
     #[inline]
@@ -42,7 +42,8 @@ pub trait SeqRead: BufRead {
         unsafe {
             slice::from_raw_parts(
                 self.as_read_ptr().offset(self.read_offset() as isize),
-                cmp::min(self.read_len(), max))
+                cmp::min(self.read_len(), max),
+            )
         }
     }
 
@@ -58,8 +59,6 @@ pub trait SeqRead: BufRead {
         Ok(len)
     }
 }
-
-
 
 /// Common output trait for all buffers.
 pub trait SeqWrite {
@@ -84,7 +83,9 @@ pub trait SeqWrite {
 
     /// Test if there is no room for furthur writes.
     #[inline]
-    fn is_full(&self) -> bool { self.write_len() == 0 }
+    fn is_full(&self) -> bool {
+        self.write_len() == 0
+    }
 
     /// Get a mutable slice covering the write region of the buffer.
     #[inline]
@@ -92,7 +93,8 @@ pub trait SeqWrite {
         unsafe {
             slice::from_raw_parts_mut(
                 self.as_write_ptr().offset(self.write_offset() as isize),
-                cmp::min(self.write_len(), max))
+                cmp::min(self.write_len(), max),
+            )
         }
     }
 
@@ -109,13 +111,11 @@ pub trait SeqWrite {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::super::AllocSize;
-    use super::{Ring, InfiniteRing, SeqRead, SeqWrite};
-    use std::io::{Write, BufRead};
+    use super::{InfiniteRing, Ring, SeqRead, SeqWrite};
+    use std::io::{BufRead, Write};
 
     #[test]
     fn size() {
@@ -142,10 +142,10 @@ mod tests {
             buf.write_all(bytes).expect("failed to write");
         }
         assert_eq!(buf.read_len(), n * bytes.len());
-        buf.consume((n-1) * bytes.len());
+        buf.consume((n - 1) * bytes.len());
         assert_eq!(buf.read_len(), bytes.len());
         buf.write_all(bytes).expect("failed to write");
-        assert_eq!(buf.read_len(), 2*bytes.len());
+        assert_eq!(buf.read_len(), 2 * bytes.len());
 
         let cmp = b"anthropomorphologicallyanthropomorphologically";
         assert_eq!(buf.as_read_slice(cmp.len()), &cmp[..]);
@@ -156,7 +156,7 @@ mod tests {
         let mut ring = InfiniteRing::new(1000).expect("failed to create ring");
         // pick some bytes that won't fit evenly in the capacity
         let bytes = b"anthropomorphologically";
-        let n = 2*ring.write_capacity() / bytes.len() + 1;
+        let n = 2 * ring.write_capacity() / bytes.len() + 1;
         for _ in 0..n {
             ring.write_all(bytes).expect("failed to write");
         }
@@ -164,7 +164,6 @@ mod tests {
 
         let cmp = b"anthropomorphologicallyanthropomorphologically";
         let end = bytes.len() - (ring.write_capacity() % bytes.len());
-        assert_eq!(ring.as_read_slice(10), &cmp[end..(end+10)]);
+        assert_eq!(ring.as_read_slice(10), &cmp[end..(end + 10)]);
     }
 }
-

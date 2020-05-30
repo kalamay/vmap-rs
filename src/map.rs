@@ -1,14 +1,12 @@
 use std::fmt;
-use std::slice;
 use std::fs::{File, OpenOptions};
-use std::path::Path;
-use std::io::{Result, Error, ErrorKind};
+use std::io::{Error, ErrorKind, Result};
 use std::ops::{Deref, DerefMut};
+use std::path::Path;
+use std::slice;
 
-use ::{AllocSize, Protect, Flush, AdviseAccess, AdviseUsage};
-use ::os::{map_file, map_anon, unmap, protect, flush, advise, lock, unlock};
-
-
+use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
+use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect};
 
 /// Allocation of one or more read-only sequential pages.
 ///
@@ -33,7 +31,7 @@ pub struct Map {
 }
 
 fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    if f.metadata()?.len() < (off+len) as u64 {
+    if f.metadata()?.len() < (off + len) as u64 {
         Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
     } else {
         unsafe { file_unchecked(f, off, len, prot) }
@@ -158,7 +156,9 @@ impl Map {
     /// # }
     /// ```
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
-        Self { base: MapMut::from_ptr(ptr, len) }
+        Self {
+            base: MapMut::from_ptr(ptr, len),
+        }
     }
 
     /// Transfer ownership of the map into a mutable map.
@@ -206,10 +206,14 @@ impl Map {
     }
 
     /// Get the length of the allocated region.
-    pub fn len(&self) -> usize { return self.base.len() }
+    pub fn len(&self) -> usize {
+        return self.base.len();
+    }
 
     /// Get the pointer to the start of the allocated region.
-    pub fn as_ptr(&self) -> *const u8 { return self.base.as_ptr() }
+    pub fn as_ptr(&self) -> *const u8 {
+        return self.base.as_ptr();
+    }
 
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
@@ -217,7 +221,13 @@ impl Map {
     }
 
     /// Updates the advise for a specific range of the mapped region.
-    pub fn advise_range(&self, off: usize, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+    pub fn advise_range(
+        &self,
+        off: usize,
+        len: usize,
+        access: AdviseAccess,
+        usage: AdviseUsage,
+    ) -> Result<()> {
         self.base.advise_range(off, len, access, usage)
     }
 
@@ -246,12 +256,16 @@ impl Deref for Map {
     type Target = [u8];
 
     #[inline]
-    fn deref(&self) -> &[u8] { self.base.deref() }
+    fn deref(&self) -> &[u8] {
+        self.base.deref()
+    }
 }
 
 impl AsRef<[u8]> for Map {
     #[inline]
-    fn as_ref(&self) -> &[u8] { self.deref() }
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
 }
 
 impl fmt::Debug for Map {
@@ -262,8 +276,6 @@ impl fmt::Debug for Map {
             .finish()
     }
 }
-
-
 
 /// Allocation of one or more read-write sequential pages.
 #[derive(Debug)]
@@ -486,13 +498,19 @@ impl MapMut {
     }
 
     /// Get the length of the allocated region.
-    pub fn len(&self) -> usize { return self.len }
+    pub fn len(&self) -> usize {
+        return self.len;
+    }
 
     /// Get the pointer to the start of the allocated region.
-    pub fn as_ptr(&self) -> *const u8 { return self.ptr }
+    pub fn as_ptr(&self) -> *const u8 {
+        return self.ptr;
+    }
 
     /// Get a mutable pointer to the start of the allocated region.
-    pub fn as_mut_ptr(&self) -> *mut u8 { return self.ptr }
+    pub fn as_mut_ptr(&self) -> *mut u8 {
+        return self.ptr;
+    }
 
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
@@ -503,9 +521,15 @@ impl MapMut {
     }
 
     /// Updates the advise for a specific range of the mapped region.
-    pub fn advise_range(&self, off: usize, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+    pub fn advise_range(
+        &self,
+        off: usize,
+        len: usize,
+        access: AdviseAccess,
+        usage: AdviseUsage,
+    ) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
@@ -524,7 +548,7 @@ impl MapMut {
     /// Lock a range of physical pages into memory.
     pub fn lock_range(&self, off: usize, len: usize) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
@@ -543,7 +567,7 @@ impl MapMut {
     /// Unlock a range of physical pages into memory.
     pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"))
+            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
@@ -579,11 +603,14 @@ impl DerefMut for MapMut {
 
 impl AsRef<[u8]> for MapMut {
     #[inline]
-    fn as_ref(&self) -> &[u8] { self.deref() }
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
 }
 
 impl AsMut<[u8]> for MapMut {
     #[inline]
-    fn as_mut(&mut self) -> &mut [u8] { self.deref_mut() }
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.deref_mut()
+    }
 }
-

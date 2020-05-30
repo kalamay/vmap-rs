@@ -98,7 +98,7 @@ pub enum AdviseAccess {
     /// The map will be accessed in a sequential manner.
     Sequential,
     /// The map will be accessed in a random manner.
-    Random
+    Random,
 }
 
 /// Hint for the immediacy of accessing the underlying mapping.
@@ -111,7 +111,6 @@ pub enum AdviseUsage {
     WillNotNeed,
 }
 
-
 /// Gets a cached version of the system page size.
 ///
 /// ```
@@ -119,10 +118,10 @@ pub enum AdviseUsage {
 /// println!("the system page size is {} bytes", vmap::page_size());
 /// ```
 pub fn page_size() -> usize {
-    static SIZE : AtomicUsize = AtomicUsize::new(0);
+    static SIZE: AtomicUsize = AtomicUsize::new(0);
     let mut size: usize = SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = ::os::page_size();
+        size = crate::os::page_size();
         SIZE.store(size, Ordering::Relaxed);
     }
     size
@@ -138,16 +137,14 @@ pub fn page_size() -> usize {
 /// println!("the system allocation granularity is {} bytes", vmap::allocation_size());
 /// ```
 pub fn allocation_size() -> usize {
-    static SIZE : AtomicUsize = AtomicUsize::new(0);
+    static SIZE: AtomicUsize = AtomicUsize::new(0);
     let mut size: usize = SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = ::os::allocation_size();
+        size = crate::os::allocation_size();
         SIZE.store(size, Ordering::Relaxed);
     }
     size
 }
-
-
 
 /// Type for calculation page size information.
 ///
@@ -261,7 +258,7 @@ impl AllocSize {
     pub fn offset(&self, len: usize) -> usize {
         len & (self.0 - 1)
     }
-    
+
     /// Convert a page count into a byte size.
     ///
     /// # Example
@@ -279,7 +276,7 @@ impl AllocSize {
     pub fn size(&self, count: Pgno) -> usize {
         (count as usize) << self.0.trailing_zeros()
     }
-    
+
     /// Covert a byte size into the number of pages necessary to contain it.
     ///
     /// # Example
@@ -341,4 +338,3 @@ mod tests {
         assert_eq!(sz.count(8192), 2);
     }
 }
-
