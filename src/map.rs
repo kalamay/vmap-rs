@@ -19,7 +19,7 @@ use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect};
 ///
 /// # fn main() -> std::io::Result<()> {
 /// let file = OpenOptions::new().read(true).open("README.md")?;
-/// let page = Map::file(&file, 39, 30)?;
+/// let page = Map::file(&file, 113, 30)?;
 /// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
 /// assert_eq!(b"fast and safe memory-mapped IO", &page[..]);
 /// assert_eq!(b"safe", &page[9..13]);
@@ -58,7 +58,7 @@ impl Map {
     /// # fn main() -> std::io::Result<()> {
     /// let map = Map::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
     /// # Ok(())
     /// # }
     /// ```
@@ -79,9 +79,9 @@ impl Map {
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
-    /// let map = Map::file(&file, 0, 69)?;
+    /// let map = Map::file(&file, 0, 143)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
     ///
     /// let map = Map::file(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(map.is_err());
@@ -116,7 +116,7 @@ impl Map {
     ///     Map::file_unchecked(&file, 0, file.metadata()?.len() as usize + 1)?
     /// };
     /// // It is safe read the valid range of the file.
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
     /// # Ok(())
     /// # }
     /// ```
@@ -324,7 +324,7 @@ impl MapMut {
     /// # fn main() -> std::io::Result<()> {
     /// let map = MapMut::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[39..69]);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
     /// # Ok(())
     /// # }
     /// ```
