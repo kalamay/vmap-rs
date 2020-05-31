@@ -19,8 +19,8 @@ use std::io::{BufRead, Error, ErrorKind, Read, Result, Write};
 /// # use std::net::{TcpListener, TcpStream};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// # let srv = TcpListener::bind("127.0.0.1:54321")?;
-/// let sock = TcpStream::connect("127.0.0.1:54321")?;
+/// # let srv = TcpListener::bind("127.0.0.1:0")?;
+/// let sock = TcpStream::connect(srv.local_addr().unwrap())?;
 /// # let (mut cli, _addr) = srv.accept()?;
 /// let mut buf = BufReader::new(sock, 4000)?;
 /// # cli.write_all(b"hello\nworld\n")?;
@@ -125,8 +125,8 @@ impl<R: Read> BufRead for BufReader<R> {
 /// # use std::net::{TcpListener, TcpStream};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// # let srv = TcpListener::bind("127.0.0.1:54321")?;
-/// let recv = TcpStream::connect("127.0.0.1:54321")?;
+/// # let srv = TcpListener::bind("127.0.0.1:0")?;
+/// let recv = TcpStream::connect(srv.local_addr().unwrap())?;
 /// let send = /* accepted socked */
 /// # srv.accept()?.0;
 ///
