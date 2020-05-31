@@ -1,12 +1,10 @@
-use ::AllocSize;
-use ::os::{map_ring, unmap_ring};
 use super::{SeqRead, SeqWrite};
+use crate::os::{map_ring, unmap_ring};
+use crate::AllocSize;
 
 use std;
-use std::io::{Result, BufRead, Read, Write};
 use std::cmp;
-
-
+use std::io::{BufRead, Read, Result, Write};
 
 /// Fixed-size reliable read/write buffer with sequential address mapping.
 ///
@@ -63,7 +61,12 @@ impl Ring {
         let len = AllocSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
-            Ok(Self { ptr: ptr, len: len, rpos: 0, wpos: 0 })
+            Ok(Self {
+                ptr: ptr,
+                len: len,
+                rpos: 0,
+                wpos: 0,
+            })
         }
     }
 }
@@ -75,16 +78,30 @@ impl Drop for Ring {
 }
 
 impl SeqRead for Ring {
-    fn as_read_ptr(&self) -> *const u8 { self.ptr }
-    fn read_offset(&self) -> usize { (self.rpos % self.len as u64) as usize }
-    fn read_len(&self) -> usize { (self.wpos - self.rpos) as usize }
+    fn as_read_ptr(&self) -> *const u8 {
+        self.ptr
+    }
+    fn read_offset(&self) -> usize {
+        (self.rpos % self.len as u64) as usize
+    }
+    fn read_len(&self) -> usize {
+        (self.wpos - self.rpos) as usize
+    }
 }
 
 impl SeqWrite for Ring {
-    fn as_write_ptr(&mut self) -> *mut u8 { self.ptr }
-    fn write_offset(&self) -> usize { (self.wpos % self.len as u64) as usize }
-    fn write_len(&self) -> usize { self.len - self.read_len() }
-    fn write_capacity(&self) -> usize { self.len }
+    fn as_write_ptr(&mut self) -> *mut u8 {
+        self.ptr
+    }
+    fn write_offset(&self) -> usize {
+        (self.wpos % self.len as u64) as usize
+    }
+    fn write_len(&self) -> usize {
+        self.len - self.read_len()
+    }
+    fn write_capacity(&self) -> usize {
+        self.len
+    }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
     }
@@ -111,10 +128,10 @@ impl Write for Ring {
         self.write_into(buf)
     }
 
-    fn flush(&mut self) -> Result<()> { Ok(()) }
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
-
-
 
 /// Fixed-size lossy read/write buffer with sequential address mapping.
 ///
@@ -173,7 +190,12 @@ impl InfiniteRing {
         let len = AllocSize::new().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
-            Ok(Self { ptr: ptr, len: len, rlen: 0, wpos: 0 })
+            Ok(Self {
+                ptr: ptr,
+                len: len,
+                rlen: 0,
+                wpos: 0,
+            })
         }
     }
 }
@@ -185,16 +207,30 @@ impl Drop for InfiniteRing {
 }
 
 impl SeqRead for InfiniteRing {
-    fn as_read_ptr(&self) -> *const u8 { self.ptr }
-    fn read_offset(&self) -> usize { ((self.wpos - self.rlen) % self.len as u64) as usize }
-    fn read_len(&self) -> usize { self.rlen as usize }
+    fn as_read_ptr(&self) -> *const u8 {
+        self.ptr
+    }
+    fn read_offset(&self) -> usize {
+        ((self.wpos - self.rlen) % self.len as u64) as usize
+    }
+    fn read_len(&self) -> usize {
+        self.rlen as usize
+    }
 }
 
 impl SeqWrite for InfiniteRing {
-    fn as_write_ptr(&mut self) -> *mut u8 { self.ptr }
-    fn write_offset(&self) -> usize { (self.wpos % self.len as u64) as usize }
-    fn write_len(&self) -> usize { self.len }
-    fn write_capacity(&self) -> usize { self.len }
+    fn as_write_ptr(&mut self) -> *mut u8 {
+        self.ptr
+    }
+    fn write_offset(&self) -> usize {
+        (self.wpos % self.len as u64) as usize
+    }
+    fn write_len(&self) -> usize {
+        self.len
+    }
+    fn write_capacity(&self) -> usize {
+        self.len
+    }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
         self.rlen = cmp::min(self.rlen + len as u64, self.len as u64);

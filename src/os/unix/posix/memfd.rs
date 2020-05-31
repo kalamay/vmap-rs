@@ -1,16 +1,18 @@
 extern crate libc;
 
-use std::io::{Result, Error};
+use std::io::{Error, Result};
 use std::os::raw::c_int;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn memfd_open() -> Result<c_int> {
     use std::os::raw::c_char;
-    const NAME : &[u8] = b"vmap";
+    const NAME: &[u8] = b"vmap";
     let fd = unsafe {
-        libc::syscall(libc::SYS_memfd_create,
-                      NAME.as_ptr() as *const c_char,
-                      libc::MFD_CLOEXEC)
+        libc::syscall(
+            libc::SYS_memfd_create,
+            NAME.as_ptr() as *const c_char,
+            libc::MFD_CLOEXEC,
+        )
     };
     if fd < 0 {
         Err(Error::last_os_error())
@@ -24,15 +26,15 @@ extern crate rand;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn memfd_open() -> Result<c_int> {
-    use self::rand::{thread_rng, Rng};
     use self::rand::distributions::Alphanumeric;
+    use self::rand::{thread_rng, Rng};
 
-    const OFLAGS: c_int = libc::O_RDWR|libc::O_CREAT|libc::O_EXCL|libc::O_CLOEXEC;
+    const OFLAGS: c_int = libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC;
 
     // There *must* be a better way to do this...
-    let mut path : [i8; 18] = [
-        0x2f,0x74,0x6d,0x70,0x2f,0x76,0x6d,0x61,0x70,0x2d, // "/tmp/vmap-"
-        0x58,0x58,0x58,0x58,0x58,0x58,0x58,0x00, // "XXXXXXX\0"
+    let mut path: [i8; 18] = [
+        0x2f, 0x74, 0x6d, 0x70, 0x2f, 0x76, 0x6d, 0x61, 0x70, 0x2d, // "/tmp/vmap-"
+        0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x58, 0x00, // "XXXXXXX\0"
     ];
 
     let mut rng = thread_rng();
@@ -57,4 +59,3 @@ pub fn memfd_open() -> Result<c_int> {
         }
     }
 }
-

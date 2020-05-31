@@ -1,18 +1,16 @@
 extern crate libc;
 
-use ::{Protect, Flush, AdviseAccess, AdviseUsage};
+use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
 
-use std::ptr;
-use std::io::{Result, Error};
 use std::fs::File;
-use std::os::unix::io::{AsRawFd};
+use std::io::{Error, Result};
+use std::os::unix::io::AsRawFd;
+use std::ptr;
 
 use self::libc::{
-    c_void, off_t,
-    mmap, munmap, mprotect, msync, madvise, mlock, munlock, sysconf,
-    PROT_READ, PROT_WRITE, MAP_ANON, MAP_SHARED, MAP_PRIVATE, MAP_FAILED,
-    MADV_NORMAL, MADV_SEQUENTIAL, MADV_RANDOM, MADV_WILLNEED, MADV_DONTNEED,
-    MS_SYNC, MS_ASYNC, _SC_PAGESIZE
+    c_void, madvise, mlock, mmap, mprotect, msync, munlock, munmap, off_t, sysconf, MADV_DONTNEED,
+    MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MAP_ANON, MAP_FAILED, MAP_PRIVATE,
+    MAP_SHARED, MS_ASYNC, MS_SYNC, PROT_READ, PROT_WRITE, _SC_PAGESIZE,
 };
 
 // For macOS and iOS we use the mach vm system for rings. The posix module
@@ -51,15 +49,29 @@ fn result(pg: *mut c_void) -> Result<*mut u8> {
 pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, flags) = match prot {
         Protect::ReadOnly => (PROT_READ, MAP_SHARED),
-        Protect::ReadWrite => (PROT_READ|PROT_WRITE, MAP_SHARED),
-        Protect::ReadCopy => (PROT_READ|PROT_WRITE, MAP_PRIVATE),
+        Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_SHARED),
+        Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_PRIVATE),
     };
-    result(mmap(ptr::null_mut(), len, prot, flags, file.as_raw_fd(), off as off_t))
+    result(mmap(
+        ptr::null_mut(),
+        len,
+        prot,
+        flags,
+        file.as_raw_fd(),
+        off as off_t,
+    ))
 }
 
 /// Creates an anonymous allocation.
 pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
-    result(mmap(ptr::null_mut(), len, PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, 0))
+    result(mmap(
+        ptr::null_mut(),
+        len,
+        PROT_READ | PROT_WRITE,
+        MAP_ANON | MAP_PRIVATE,
+        -1,
+        0,
+    ))
 }
 
 /// Unmaps a page range from a previos mapping.
@@ -75,8 +87,8 @@ pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
 pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     let prot = match prot {
         Protect::ReadOnly => PROT_READ,
-        Protect::ReadWrite => PROT_READ|PROT_WRITE,
-        Protect::ReadCopy => PROT_READ|PROT_WRITE,
+        Protect::ReadWrite => PROT_READ | PROT_WRITE,
+        Protect::ReadCopy => PROT_READ | PROT_WRITE,
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
         Err(Error::last_os_error())
@@ -99,19 +111,21 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
 }
 
 /// Updates the advise for the page range.
-pub unsafe fn advise(pg: *mut u8, len: usize, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
-    let adv =
-        match access {
-            AdviseAccess::Normal => MADV_NORMAL,
-            AdviseAccess::Sequential => MADV_SEQUENTIAL,
-            AdviseAccess::Random => MADV_RANDOM,
-        }
-    | 
-        match usage {
-            AdviseUsage::Normal => 0,
-            AdviseUsage::WillNeed => MADV_WILLNEED,
-            AdviseUsage::WillNotNeed => MADV_DONTNEED,
-        };
+pub unsafe fn advise(
+    pg: *mut u8,
+    len: usize,
+    access: AdviseAccess,
+    usage: AdviseUsage,
+) -> Result<()> {
+    let adv = match access {
+        AdviseAccess::Normal => MADV_NORMAL,
+        AdviseAccess::Sequential => MADV_SEQUENTIAL,
+        AdviseAccess::Random => MADV_RANDOM,
+    } | match usage {
+        AdviseUsage::Normal => 0,
+        AdviseUsage::WillNeed => MADV_WILLNEED,
+        AdviseUsage::WillNotNeed => MADV_DONTNEED,
+    };
 
     if madvise(pg as *mut c_void, len, adv) < 0 {
         Err(Error::last_os_error())
@@ -137,4 +151,3 @@ pub unsafe fn unlock(pg: *mut u8, len: usize) -> Result<()> {
         Ok(())
     }
 }
-
