@@ -38,9 +38,20 @@ fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut 
     }
 }
 
-fn file_max(f: &File, off: usize, maxlen: usize, prot: Protect) -> Result<(*mut u8, usize)> {
-    let len = std::cmp::min(f.metadata()?.len() as usize, off + maxlen);
-    Ok((unsafe { file_unchecked(f, off, len, prot) }?, len))
+fn file_max(
+    f: &File,
+    mut off: usize,
+    mut maxlen: usize,
+    prot: Protect,
+) -> Result<(*mut u8, usize)> {
+    let len = f.metadata()?.len();
+    if len < off as u64 {
+        off = 0;
+        maxlen = 0;
+    } else {
+        maxlen = std::cmp::min((len - (off as u64)) as usize, maxlen);
+    }
+    Ok((unsafe { file_unchecked(f, off, maxlen, prot) }?, maxlen))
 }
 
 unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
