@@ -71,13 +71,13 @@ pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
 
 fn tmp_open(size: usize) -> Result<c_int> {
     let fd = memfd_open()?;
-    unsafe {
-        if ftruncate(fd, size as off_t) < 0 {
-            let err = Error::last_os_error();
+    if unsafe { ftruncate(fd, size as off_t) } < 0 {
+        let err = Error::last_os_error();
+        unsafe {
             close(fd);
-            Err(err)
-        } else {
-            Ok(fd)
         }
+        Err(err)
+    } else {
+        Ok(fd)
     }
 }

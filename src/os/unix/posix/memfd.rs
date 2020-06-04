@@ -6,7 +6,7 @@ use std::os::raw::c_int;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn memfd_open() -> Result<c_int> {
     use std::os::raw::c_char;
-    const NAME: &[u8] = b"vmap";
+    const NAME: &[u8] = b"vmap\0";
     let fd = unsafe {
         libc::syscall(
             libc::SYS_memfd_create,
@@ -45,17 +45,15 @@ pub fn memfd_open() -> Result<c_int> {
             *dst = rng.sample(&Alphanumeric) as i8;
         }
 
-        unsafe {
-            let fd = libc::shm_open(path.as_ptr(), OFLAGS, 0600);
-            if fd < 0 {
-                let err = Error::last_os_error();
-                if err.raw_os_error() != Some(libc::EEXIST) {
-                    return Err(err);
-                }
-            } else {
-                libc::shm_unlink(path.as_ptr());
-                return Ok(fd);
+        let fd = unsafe { libc::shm_open(path.as_ptr(), OFLAGS, 0600) };
+        if fd < 0 {
+            let err = Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EEXIST) {
+                return Err(err);
             }
+        } else {
+            unsafe { libc::shm_unlink(path.as_ptr()) };
+            return Ok(fd);
         }
     }
 }
