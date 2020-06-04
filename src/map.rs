@@ -38,6 +38,11 @@ fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut 
     }
 }
 
+fn file_max(f: &File, off: usize, maxlen: usize, prot: Protect) -> Result<(*mut u8, usize)> {
+    let len = std::cmp::min(f.metadata()?.len() as usize, off + maxlen);
+    Ok((unsafe { file_unchecked(f, off, len, prot) }?, len))
+}
+
 unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let sz = AllocSize::new();
     let roff = sz.truncate(off);
@@ -91,6 +96,34 @@ impl Map {
     pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
         let ptr = file_checked(f, offset, length, Protect::ReadOnly)?;
         Ok(unsafe { Self::from_ptr(ptr, length) })
+    }
+
+    /// Create a new map object from a maximum range of a file. Unlike `file`,
+    /// the length is only a maximum size to map. If the length of the file
+    /// is less than the requested range, the returned mapping will be
+    /// shortened to match the file.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # extern crate vmap;
+    /// use std::fs::OpenOptions;
+    /// use vmap::Map;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// let file = OpenOptions::new().read(true).open("README.md")?;
+    /// let map = Map::file_max(&file, 0, 5000)?;
+    /// assert_eq!(map.is_empty(), false);
+    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    ///
+    /// let map = Map::file_max(&file, 0, file.metadata()?.len() as usize + 1);
+    /// assert!(!map.is_err());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
+        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadOnly)?;
+        Ok(unsafe { Self::from_ptr(ptr, len) })
     }
 
     /// Create a new map object from a range of a file without bounds checking.
@@ -340,6 +373,15 @@ impl MapMut {
         Ok(unsafe { Self::from_ptr(ptr, length) })
     }
 
+    /// Create a new mutable map object from a maximum range of a file. Unlike
+    /// `file`, the length is only a maximum size to map. If the length of the
+    /// file is less than the requested range, the returned mapping will be
+    /// shortened to match the file.
+    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
+        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadWrite)?;
+        Ok(unsafe { Self::from_ptr(ptr, len) })
+    }
+
     /// Create a new mutable map object from a range of a file without bounds
     /// checking.
     ///
@@ -384,6 +426,18 @@ impl MapMut {
     pub fn copy(f: &File, offset: usize, length: usize) -> Result<Self> {
         let ptr = file_checked(f, offset, length, Protect::ReadCopy)?;
         Ok(unsafe { Self::from_ptr(ptr, length) })
+    }
+
+    /// Create a new private map object from a range of a file.  Unlike
+    /// `copy`, the length is only a maximum size to map. If the length of the
+    /// file is less than the requested range, the returned mapping will be
+    /// shortened to match the file.
+    ///
+    /// Initially, the mapping will be shared with other processes, but writes
+    /// will be kept private.
+    pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
+        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadCopy)?;
+        Ok(unsafe { Self::from_ptr(ptr, len) })
     }
 
     /// Create a new private map object from a range of a file without bounds checking.
