@@ -31,7 +31,7 @@ pub struct Map {
 }
 
 fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    if f.metadata()?.len() < (off + len) as u64 {
+    if f.metadata()?.len() < off as u64 + len as u64 {
         Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
     } else {
         unsafe { file_unchecked(f, off, len, prot) }
@@ -40,18 +40,20 @@ fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut 
 
 fn file_max(
     f: &File,
-    mut off: usize,
+    off: usize,
     mut maxlen: usize,
     prot: Protect,
-) -> Result<(*mut u8, usize)> {
+) -> Result<Option<(*mut u8, usize)>> {
     let len = f.metadata()?.len();
-    if len < off as u64 {
-        off = 0;
-        maxlen = 0;
+    if len <= off as u64 {
+        Ok(None)
     } else {
         maxlen = std::cmp::min((len - (off as u64)) as usize, maxlen);
+        Ok(Some((
+            unsafe { file_unchecked(f, off, maxlen, prot) }?,
+            maxlen,
+        )))
     }
-    Ok((unsafe { file_unchecked(f, off, maxlen, prot) }?, maxlen))
 }
 
 unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
@@ -123,18 +125,23 @@ impl Map {
     ///
     /// # fn main() -> std::io::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
-    /// let map = Map::file_max(&file, 0, 5000)?;
+    /// let map = Map::file_max(&file, 0, 5000)?.expect("should be valid range");
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
     ///
     /// let map = Map::file_max(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(!map.is_err());
+    ///
+    /// let map = Map::file_max(&file, 5000, 100)?;
+    /// assert!(map.is_none());
     /// # Ok(())
     /// # }
     /// ```
-    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
-        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadOnly)?;
-        Ok(unsafe { Self::from_ptr(ptr, len) })
+    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
+        match file_max(f, offset, max_length, Protect::ReadOnly)? {
+            Some((ptr, len)) => Ok(Some(unsafe { Self::from_ptr(ptr, len) })),
+            None => Ok(None),
+        }
     }
 
     /// Create a new map object from a range of a file without bounds checking.
@@ -388,9 +395,11 @@ impl MapMut {
     /// `file`, the length is only a maximum size to map. If the length of the
     /// file is less than the requested range, the returned mapping will be
     /// shortened to match the file.
-    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
-        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadWrite)?;
-        Ok(unsafe { Self::from_ptr(ptr, len) })
+    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
+        match file_max(f, offset, max_length, Protect::ReadWrite)? {
+            Some((ptr, len)) => Ok(Some(unsafe { Self::from_ptr(ptr, len) })),
+            None => Ok(None),
+        }
     }
 
     /// Create a new mutable map object from a range of a file without bounds
@@ -446,9 +455,11 @@ impl MapMut {
     ///
     /// Initially, the mapping will be shared with other processes, but writes
     /// will be kept private.
-    pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Self> {
-        let (ptr, len) = file_max(f, offset, max_length, Protect::ReadCopy)?;
-        Ok(unsafe { Self::from_ptr(ptr, len) })
+    pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
+        match file_max(f, offset, max_length, Protect::ReadCopy)? {
+            Some((ptr, len)) => Ok(Some(unsafe { Self::from_ptr(ptr, len) })),
+            None => Ok(None),
+        }
     }
 
     /// Create a new private map object from a range of a file without bounds checking.
@@ -644,8 +655,10 @@ impl MapMut {
 impl Drop for MapMut {
     fn drop(&mut self) {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
-            unmap(ptr, len).unwrap_or_default();
+            if self.len > 0 {
+                let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+                unmap(ptr, len).unwrap_or_default();
+            }
         }
     }
 }
