@@ -66,6 +66,9 @@ pub mod os {
 mod map;
 pub use self::map::{Map, MapMut, Mapped, MappedMut};
 
+mod slice;
+pub use self::slice::{ByteRange, Slice};
+
 pub mod io;
 
 /// Type to represent whole page offsets and counts.
