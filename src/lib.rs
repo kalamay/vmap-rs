@@ -67,7 +67,7 @@ mod map;
 pub use self::map::{Map, MapMut, Mapped, MappedMut};
 
 mod slice;
-pub use self::slice::{ByteRange, Slice};
+pub use self::slice::{ArcSlice, ByteRange};
 
 pub mod io;
 

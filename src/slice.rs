@@ -45,17 +45,17 @@ fn trim_range(r: ByteRange, len: usize) -> ByteRange {
     }
 }
 
-/// Slice over a map.
+/// Slice over a reference counted map.
 ///
 /// # Example
 /// ```
 /// # extern crate vmap;
 /// use std::fs::OpenOptions;
-/// use vmap::{Map, Slice};
+/// use vmap::{Map, ArcSlice};
 ///
 /// # fn main() -> std::io::Result<()> {
 /// let map = Map::open("README.md")?;
-/// let slice = Slice::new(map, 113..143);
+/// let slice = ArcSlice::new(map, 113..143);
 /// assert_eq!(slice.is_empty(), false);
 /// assert_eq!(b"fast and safe memory-mapped IO", &slice[..]);
 /// let (left, right) = slice.split_at(9);
@@ -66,12 +66,12 @@ fn trim_range(r: ByteRange, len: usize) -> ByteRange {
 /// # Ok(())
 /// # }
 /// ```
-pub struct Slice<M> {
+pub struct ArcSlice<M> {
     map: Arc<M>,
     rng: ByteRange,
 }
 
-impl<M> Slice<M>
+impl<M> ArcSlice<M>
 where
     M: Mapped,
 {
@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<M> Mapped for Slice<M>
+impl<M> Mapped for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<M> MappedMut for Slice<M>
+impl<M> MappedMut for ArcSlice<M>
 where
     M: MappedMut,
 {
@@ -122,7 +122,7 @@ where
     }
 }
 
-impl<M> Deref for Slice<M>
+impl<M> Deref for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -134,7 +134,7 @@ where
     }
 }
 
-impl<M> DerefMut for Slice<M>
+impl<M> DerefMut for ArcSlice<M>
 where
     M: MappedMut,
 {
@@ -144,7 +144,7 @@ where
     }
 }
 
-impl<M> AsRef<[u8]> for Slice<M>
+impl<M> AsRef<[u8]> for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -154,7 +154,7 @@ where
     }
 }
 
-impl<M> AsMut<[u8]> for Slice<M>
+impl<M> AsMut<[u8]> for ArcSlice<M>
 where
     M: MappedMut,
 {
@@ -164,7 +164,7 @@ where
     }
 }
 
-impl<M> From<M> for Slice<M>
+impl<M> From<M> for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -177,7 +177,7 @@ where
     }
 }
 
-impl<M> From<&Arc<M>> for Slice<M>
+impl<M> From<&Arc<M>> for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -190,16 +190,16 @@ where
     }
 }
 
-impl<M> From<Slice<M>> for Arc<M>
+impl<M> From<ArcSlice<M>> for Arc<M>
 where
     M: Mapped,
 {
-    fn from(slice: Slice<M>) -> Arc<M> {
+    fn from(slice: ArcSlice<M>) -> Arc<M> {
         slice.map
     }
 }
 
-impl<M> fmt::Debug for Slice<M>
+impl<M> fmt::Debug for ArcSlice<M>
 where
     M: Mapped,
 {
@@ -226,12 +226,12 @@ mod tests {
     }
 
     #[test]
-    fn test_slice() {
+    fn test_arc_slice() {
         let mut map = MapMut::new(100, Protect::ReadWrite).expect("failed to create map");
         map[0] = 88;
         map[10] = 99;
 
-        let slice = Slice::from(map);
+        let slice = ArcSlice::from(map);
         let len = slice.len();
 
         let (l, r) = slice.split_at(6);
