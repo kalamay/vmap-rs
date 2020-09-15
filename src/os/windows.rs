@@ -119,9 +119,18 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
 }
 
 /// Creates an anonymous allocation.
-pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
-    let map = MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, len)?;
-    map.view(FILE_MAP_READ | FILE_MAP_WRITE, 0, len, ptr::null_mut())
+pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
+    let (prot, access) = match prot {
+        Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
+        Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
+        Protect::ReadCopy => (
+            PAGE_READWRITE | PAGE_WRITECOPY,
+            FILE_MAP_READ | FILE_MAP_COPY,
+        ),
+    };
+
+    let map = MapHandle::new(INVALID_HANDLE_VALUE, prot, 0)?;
+    map.view(access, 0, len, ptr::null_mut())
 }
 
 unsafe fn reserve(len: usize) -> Result<*mut c_void> {

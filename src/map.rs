@@ -342,11 +342,11 @@ impl MapMut {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use vmap::MapMut;
+    /// use vmap::{MapMut, Protect};
     /// use std::io::Write;
     ///
     /// # fn main() -> std::io::Result<()> {
-    /// let mut map = MapMut::new(200)?;
+    /// let mut map = MapMut::new(200, Protect::ReadCopy)?;
     /// {
     ///     let mut data = &mut map[..];
     ///     assert!(data.len() >= 200);
@@ -356,10 +356,10 @@ impl MapMut {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(hint: usize) -> Result<Self> {
+    pub fn new(hint: usize, prot: Protect) -> Result<Self> {
         unsafe {
             let len = AllocSize::new().round(hint);
-            let ptr = map_anon(len)?;
+            let ptr = map_anon(len, prot)?;
             Ok(Self::from_ptr(ptr, len))
         }
     }
@@ -668,14 +668,14 @@ impl Deref for MapMut {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 }
 
 impl DerefMut for MapMut {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr, self.len) }
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
 }
 

@@ -63,15 +63,13 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
 }
 
 /// Creates an anonymous allocation.
-pub unsafe fn map_anon(len: usize) -> Result<*mut u8> {
-    result(mmap(
-        ptr::null_mut(),
-        len,
-        PROT_READ | PROT_WRITE,
-        MAP_ANON | MAP_PRIVATE,
-        -1,
-        0,
-    ))
+pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
+    let (prot, flags) = match prot {
+        Protect::ReadOnly => (PROT_READ, MAP_SHARED),
+        Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED),
+        Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE),
+    };
+    result(mmap(ptr::null_mut(), len, prot, flags, -1, 0))
 }
 
 /// Unmaps a page range from a previos mapping.
