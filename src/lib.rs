@@ -64,7 +64,7 @@ pub mod os {
 }
 
 mod map;
-pub use self::map::{Map, MapMut};
+pub use self::map::{Map, MapMut, Mapped, MappedMut};
 
 pub mod io;
 

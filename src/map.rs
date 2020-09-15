@@ -8,6 +8,26 @@ use std::slice;
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect};
 
+/// General trait for working with any mapped value.
+pub trait Mapped {
+    /// Get the length of the allocated region.
+    fn len(&self) -> usize;
+
+    /// Get the pointer to the start of the allocated region.
+    fn as_ptr(&self) -> *const u8;
+
+    /// Tests if the mapped pointer has the correct alignment.
+    fn is_aligned_to(&self, alignment: usize) -> bool {
+        (self.as_ptr() as *const _ as *const () as usize) % alignment == 0
+    }
+}
+
+/// General trait for working with any mutably mapped value.
+pub trait MappedMut: Mapped {
+    /// Get a mutable pointer to the start of the allocated region.
+    fn as_mut_ptr(&self) -> *mut u8;
+}
+
 /// Allocation of one or more read-only sequential pages.
 ///
 /// # Example
@@ -256,16 +276,6 @@ impl Map {
         Ok(self.base)
     }
 
-    /// Get the length of the allocated region.
-    pub fn len(&self) -> usize {
-        return self.base.len();
-    }
-
-    /// Get the pointer to the start of the allocated region.
-    pub fn as_ptr(&self) -> *const u8 {
-        return self.base.as_ptr();
-    }
-
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
         self.base.advise(access, usage)
@@ -300,6 +310,18 @@ impl Map {
     /// Unlock a range of physical pages into memory.
     pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
         self.base.unlock_range(off, len)
+    }
+}
+
+impl Mapped for Map {
+    #[inline]
+    fn len(&self) -> usize {
+        self.base.len()
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        self.base.as_ptr()
     }
 }
 
@@ -573,21 +595,6 @@ impl MapMut {
         }
     }
 
-    /// Get the length of the allocated region.
-    pub fn len(&self) -> usize {
-        return self.len;
-    }
-
-    /// Get the pointer to the start of the allocated region.
-    pub fn as_ptr(&self) -> *const u8 {
-        return self.ptr;
-    }
-
-    /// Get a mutable pointer to the start of the allocated region.
-    pub fn as_mut_ptr(&self) -> *mut u8 {
-        return self.ptr;
-    }
-
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
         unsafe {
@@ -649,6 +656,25 @@ impl MapMut {
             let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
             unlock(ptr, len)
         }
+    }
+}
+
+impl Mapped for MapMut {
+    #[inline]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        self.ptr
+    }
+}
+
+impl MappedMut for MapMut {
+    #[inline]
+    fn as_mut_ptr(&self) -> *mut u8 {
+        self.ptr
     }
 }
 
