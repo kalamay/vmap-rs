@@ -80,8 +80,8 @@ impl Map {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = OpenOptions::new().read(true).open(&path)?;
+    pub fn open<P: AsRef<Path> + ?Sized>(path: &P) -> Result<Self> {
+        let file = OpenOptions::new().read(true).open(path)?;
         let size = file.metadata()?.len();
         unsafe { Self::file_unchecked(&file, 0, size as usize) }
     }
@@ -379,8 +379,8 @@ impl MapMut {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let file = OpenOptions::new().read(true).write(true).open(&path)?;
+    pub fn open<P: AsRef<Path> + ?Sized>(path: &P) -> Result<Self> {
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
         let size = file.metadata()?.len();
         unsafe { Self::file_unchecked(&file, 0, size as usize) }
     }
