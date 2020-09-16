@@ -2,7 +2,6 @@ use super::{SeqRead, SeqWrite};
 use crate::os::{map_ring, unmap_ring};
 use crate::AllocSize;
 
-use std;
 use std::cmp;
 use std::io::{BufRead, Read, Result, Write};
 
@@ -62,8 +61,8 @@ impl Ring {
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self {
-                ptr: ptr,
-                len: len,
+                ptr,
+                len,
                 rpos: 0,
                 wpos: 0,
             })
@@ -191,8 +190,8 @@ impl InfiniteRing {
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self {
-                ptr: ptr,
-                len: len,
+                ptr,
+                len,
                 rlen: 0,
                 wpos: 0,
             })

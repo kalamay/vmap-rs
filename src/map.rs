@@ -518,7 +518,7 @@ impl MapMut {
     /// # }
     /// ```
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
-        Self { ptr: ptr, len: len }
+        Self { ptr, len }
     }
 
     /// Transfer ownership of the map into a mutable map.

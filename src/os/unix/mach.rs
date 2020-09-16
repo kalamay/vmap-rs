@@ -82,10 +82,7 @@ pub struct MachError {
 
 impl MachError {
     pub fn new(code: kern_return_t, msg: &'static str) -> Self {
-        Self {
-            code: code,
-            msg: msg,
-        }
+        Self { code, msg }
     }
 }
 

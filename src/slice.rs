@@ -49,7 +49,7 @@ where
     pub fn new(map: &'a M, rng: ByteRange) -> Self {
         let len = map.len();
         Self {
-            map: map,
+            map,
             rng: trim_range(rng, len),
         }
     }
@@ -145,8 +145,8 @@ where
     fn from(map: &'a M) -> Self {
         let end = map.len();
         Self {
-            map: map,
-            rng: ByteRange { start: 0, end: end },
+            map,
+            rng: ByteRange { start: 0, end },
         }
     }
 }
@@ -294,7 +294,7 @@ where
         let end = map.len();
         Self {
             map: Arc::new(map),
-            rng: ByteRange { start: 0, end: end },
+            rng: ByteRange { start: 0, end },
         }
     }
 }
@@ -307,7 +307,7 @@ where
         let end = map.len();
         Self {
             map: Arc::clone(map),
-            rng: ByteRange { start: 0, end: end },
+            rng: ByteRange { start: 0, end },
         }
     }
 }

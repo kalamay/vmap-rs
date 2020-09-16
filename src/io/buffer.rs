@@ -1,6 +1,5 @@
 use super::{Ring, SeqRead, SeqWrite};
 
-use std;
 use std::io::{BufRead, Error, ErrorKind, Read, Result, Write};
 
 /// The `BufReader` adds buffering to any reader using a specialized buffer.
@@ -41,7 +40,7 @@ impl<R: Read> BufReader<R> {
     pub fn new(inner: R, capacity: usize) -> Result<Self> {
         Ok(Self {
             buf: Ring::new(capacity)?,
-            inner: inner,
+            inner,
             lowat: 0,
         })
     }
