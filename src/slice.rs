@@ -1,6 +1,5 @@
 use std::fmt;
 use std::ops::{Deref, DerefMut};
-use std::slice;
 use std::sync::Arc;
 
 use super::{Span, SpanMut};
@@ -104,7 +103,7 @@ where
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        self.as_slice()
     }
 }
 
@@ -114,7 +113,7 @@ where
 {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+        self.as_mut_slice()
     }
 }
 
@@ -124,7 +123,7 @@ where
 {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self.as_slice()
     }
 }
 
@@ -134,7 +133,7 @@ where
 {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
-        self.deref_mut()
+        self.as_mut_slice()
     }
 }
 
@@ -252,7 +251,7 @@ where
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        self.as_slice()
     }
 }
 
@@ -262,7 +261,7 @@ where
 {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+        self.as_mut_slice()
     }
 }
 
@@ -272,7 +271,7 @@ where
 {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self.as_slice()
     }
 }
 
@@ -282,7 +281,7 @@ where
 {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
-        self.deref_mut()
+        self.as_mut_slice()
     }
 }
 

@@ -63,32 +63,8 @@ pub mod os {
     pub use self::windows::*;
 }
 
-/// General trait for working with any memory-safe representation of a
-/// contiguous region of arbitrary memory.
-pub trait Span {
-    /// Get the length of the allocated region.
-    fn len(&self) -> usize;
-
-    /// Get the pointer to the start of the allocated region.
-    fn as_ptr(&self) -> *const u8;
-
-    /// Tests if the span covers zero bytes.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Tests if the mapped pointer has the correct alignment.
-    fn is_aligned_to(&self, alignment: usize) -> bool {
-        (self.as_ptr() as *const _ as *const () as usize) % alignment == 0
-    }
-}
-
-/// General trait for working with any memory-safe representation of a
-/// contiguous region of arbitrary memory with interior mutability.
-pub trait SpanMut: Span {
-    /// Get a mutable pointer to the start of the allocated region.
-    fn as_mut_ptr(&self) -> *mut u8;
-}
+mod span;
+pub use self::span::{Span, SpanMut};
 
 mod map;
 pub use self::map::{Map, MapMut};

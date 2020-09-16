@@ -3,7 +3,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::slice;
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut};
@@ -310,14 +309,14 @@ impl Deref for Map {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        self.base.deref()
+        self.as_slice()
     }
 }
 
 impl AsRef<[u8]> for Map {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self.as_slice()
     }
 }
 
@@ -674,27 +673,27 @@ impl Deref for MapMut {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        self.as_slice()
     }
 }
 
 impl DerefMut for MapMut {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+        self.as_mut_slice()
     }
 }
 
 impl AsRef<[u8]> for MapMut {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self.as_slice()
     }
 }
 
 impl AsMut<[u8]> for MapMut {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
-        self.deref_mut()
+        self.as_mut_slice()
     }
 }
