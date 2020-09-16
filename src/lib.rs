@@ -72,6 +72,11 @@ pub trait Span {
     /// Get the pointer to the start of the allocated region.
     fn as_ptr(&self) -> *const u8;
 
+    /// Tests if the span covers zero bytes.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Tests if the mapped pointer has the correct alignment.
     fn is_aligned_to(&self, alignment: usize) -> bool {
         (self.as_ptr() as *const _ as *const () as usize) % alignment == 0
