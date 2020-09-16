@@ -41,7 +41,7 @@ pub trait SeqRead: BufRead {
     fn as_read_slice(&self, max: usize) -> &[u8] {
         unsafe {
             slice::from_raw_parts(
-                self.as_read_ptr().offset(self.read_offset() as isize),
+                self.as_read_ptr().add(self.read_offset()),
                 cmp::min(self.read_len(), max),
             )
         }
@@ -92,7 +92,7 @@ pub trait SeqWrite {
     fn as_write_slice(&mut self, max: usize) -> &mut [u8] {
         unsafe {
             slice::from_raw_parts_mut(
-                self.as_write_ptr().offset(self.write_offset() as isize),
+                self.as_write_ptr().add(self.write_offset()),
                 cmp::min(self.write_len(), max),
             )
         }

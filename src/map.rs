@@ -61,7 +61,7 @@ unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Res
     let roff = sz.truncate(off);
     let rlen = sz.round(len + (off - roff));
     let ptr = map_file(f, roff, rlen, prot)?;
-    Ok(ptr.offset((off - roff) as isize))
+    Ok(ptr.add(off - roff))
 }
 
 impl Map {
@@ -595,7 +595,7 @@ impl MapMut {
             return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
             advise(ptr, len, access, usage)
         }
     }
@@ -614,7 +614,7 @@ impl MapMut {
             return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
             lock(ptr, len)
         }
     }
@@ -633,7 +633,7 @@ impl MapMut {
             return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
         }
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.offset(off as isize), len);
+            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
             unlock(ptr, len)
         }
     }

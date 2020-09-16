@@ -83,7 +83,7 @@ where
     }
 
     fn as_ptr(&self) -> *const u8 {
-        unsafe { self.map.as_ptr().offset(self.rng.start as isize) }
+        unsafe { self.map.as_ptr().add(self.rng.start) }
     }
 }
 
@@ -92,7 +92,7 @@ where
     M: SpanMut,
 {
     fn as_mut_ptr(&self) -> *mut u8 {
-        unsafe { self.map.as_mut_ptr().offset(self.rng.start as isize) }
+        unsafe { self.map.as_mut_ptr().add(self.rng.start) }
     }
 }
 
@@ -231,7 +231,7 @@ where
     }
 
     fn as_ptr(&self) -> *const u8 {
-        unsafe { self.map.as_ptr().offset(self.rng.start as isize) }
+        unsafe { self.map.as_ptr().add(self.rng.start) }
     }
 }
 
@@ -240,7 +240,7 @@ where
     M: SpanMut,
 {
     fn as_mut_ptr(&self) -> *mut u8 {
-        unsafe { self.map.as_mut_ptr().offset(self.rng.start as isize) }
+        unsafe { self.map.as_mut_ptr().add(self.rng.start) }
     }
 }
 

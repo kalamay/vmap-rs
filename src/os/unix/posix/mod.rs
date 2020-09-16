@@ -44,12 +44,7 @@ fn wrap_ptr(pg: *mut u8, len: usize, fd: c_int) -> Result<*mut u8> {
     // Map the two halves of the buffer into adjacent adresses that use the
     // same file descriptor offset.
     map(pg, len, MAP_SHARED | MAP_FIXED, fd)?;
-    map(
-        unsafe { pg.offset(len as isize) },
-        len,
-        MAP_SHARED | MAP_FIXED,
-        fd,
-    )?;
+    map(unsafe { pg.add(len) }, len, MAP_SHARED | MAP_FIXED, fd)?;
     Ok(pg)
 }
 

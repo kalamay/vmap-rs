@@ -145,12 +145,7 @@ unsafe fn reserve(len: usize) -> Result<*mut c_void> {
 
 unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Result<*mut u8> {
     let a = map.view(FILE_MAP_READ | FILE_MAP_WRITE, 0, len, pg)?;
-    let b = map.view(
-        FILE_MAP_READ | FILE_MAP_WRITE,
-        0,
-        len,
-        pg.offset(len as isize),
-    );
+    let b = map.view(FILE_MAP_READ | FILE_MAP_WRITE, 0, len, pg.add(len));
     if b.is_err() {
         UnmapViewOfFile(a as *mut c_void);
         b
