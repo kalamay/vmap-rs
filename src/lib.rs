@@ -340,6 +340,12 @@ impl AllocSize {
     }
 }
 
+impl Default for AllocSize {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AllocSize;
