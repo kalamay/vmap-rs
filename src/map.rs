@@ -6,27 +6,7 @@ use std::path::Path;
 use std::slice;
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
-use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect};
-
-/// General trait for working with any mapped value.
-pub trait Mapped {
-    /// Get the length of the allocated region.
-    fn len(&self) -> usize;
-
-    /// Get the pointer to the start of the allocated region.
-    fn as_ptr(&self) -> *const u8;
-
-    /// Tests if the mapped pointer has the correct alignment.
-    fn is_aligned_to(&self, alignment: usize) -> bool {
-        (self.as_ptr() as *const _ as *const () as usize) % alignment == 0
-    }
-}
-
-/// General trait for working with any mutably mapped value.
-pub trait MappedMut: Mapped {
-    /// Get a mutable pointer to the start of the allocated region.
-    fn as_mut_ptr(&self) -> *mut u8;
-}
+use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut};
 
 /// Allocation of one or more read-only sequential pages.
 ///
@@ -313,7 +293,7 @@ impl Map {
     }
 }
 
-impl Mapped for Map {
+impl Span for Map {
     #[inline]
     fn len(&self) -> usize {
         self.base.len()
@@ -659,7 +639,7 @@ impl MapMut {
     }
 }
 
-impl Mapped for MapMut {
+impl Span for MapMut {
     #[inline]
     fn len(&self) -> usize {
         self.len
@@ -671,7 +651,7 @@ impl Mapped for MapMut {
     }
 }
 
-impl MappedMut for MapMut {
+impl SpanMut for MapMut {
     #[inline]
     fn as_mut_ptr(&self) -> *mut u8 {
         self.ptr
