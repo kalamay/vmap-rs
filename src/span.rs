@@ -40,3 +40,34 @@ pub trait SpanMut: Span {
         unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
 }
+
+impl<'a> Span for &'a [u8] {
+    #[inline]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        <[u8]>::as_ptr(self)
+    }
+}
+
+impl<'a> Span for &'a mut [u8] {
+    #[inline]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        <[u8]>::as_ptr(self)
+    }
+}
+
+impl<'a> SpanMut for &'a mut [u8] {
+    #[inline]
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        <[u8]>::as_mut_ptr(self)
+    }
+}
