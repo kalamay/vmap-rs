@@ -1,13 +1,11 @@
 #![allow(non_camel_case_types)]
 
-extern crate libc;
-
 use std::ffi::CStr;
 use std::io::{Error, ErrorKind, Result};
 use std::os::raw::{c_char, c_int, c_uint};
 use std::{error, fmt};
 
-use self::libc::uintptr_t;
+use libc::uintptr_t;
 
 type kern_return_t = c_int;
 type vm_offset_t = uintptr_t;

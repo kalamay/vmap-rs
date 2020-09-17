@@ -1,5 +1,3 @@
-extern crate libc;
-
 use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
 
 use std::fs::File;
@@ -7,7 +5,7 @@ use std::io::{Error, Result};
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 
-use self::libc::{
+use libc::{
     c_void, madvise, mlock, mmap, mprotect, msync, munlock, munmap, off_t, sysconf, MADV_DONTNEED,
     MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MAP_ANON, MAP_FAILED, MAP_PRIVATE,
     MAP_SHARED, MS_ASYNC, MS_SYNC, PROT_READ, PROT_WRITE, _SC_PAGESIZE,

@@ -1,5 +1,3 @@
-extern crate libc;
-
 mod memfd;
 use self::memfd::memfd_open;
 
@@ -7,7 +5,7 @@ use std::io::{Error, Result};
 use std::os::raw::c_int;
 use std::ptr;
 
-use self::libc::{
+use libc::{
     c_void, close, ftruncate, mmap, off_t, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE,
     MAP_SHARED, PROT_READ, PROT_WRITE,
 };
