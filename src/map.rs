@@ -652,7 +652,7 @@ impl Span for MapMut {
 
 impl SpanMut for MapMut {
     #[inline]
-    fn as_mut_ptr(&self) -> *mut u8 {
+    fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }
 }

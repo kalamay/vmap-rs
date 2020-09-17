@@ -32,7 +32,7 @@ pub trait Span {
 /// contiguous region of arbitrary memory with interior mutability.
 pub trait SpanMut: Span {
     /// Get a mutable pointer to the start of the allocated region.
-    fn as_mut_ptr(&self) -> *mut u8;
+    fn as_mut_ptr(&mut self) -> *mut u8;
 
     /// Get a mutable reference to the memory span as a native slice.
     #[inline]
