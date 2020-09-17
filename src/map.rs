@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::fmt;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result};
@@ -314,6 +315,14 @@ impl AsRef<[u8]> for Map {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.deref()
+    }
+}
+
+impl TryFrom<MapMut> for Map {
+    type Error = std::io::Error;
+
+    fn try_from(map: MapMut) -> Result<Map> {
+        map.make_read_only()
     }
 }
 
@@ -692,5 +701,13 @@ impl AsMut<[u8]> for MapMut {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
         self.deref_mut()
+    }
+}
+
+impl TryFrom<Map> for MapMut {
+    type Error = std::io::Error;
+
+    fn try_from(map: Map) -> Result<MapMut> {
+        map.make_mut()
     }
 }
