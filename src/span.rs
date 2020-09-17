@@ -1,8 +1,17 @@
 use std::ops::{Deref, DerefMut};
 
+mod sealed {
+    pub trait Sealed {}
+
+    impl Sealed for crate::Map {}
+    impl Sealed for crate::MapMut {}
+    impl<'a> Sealed for &'a [u8] {}
+    impl<'a> Sealed for &'a mut [u8] {}
+}
+
 /// General trait for working with any memory-safe representation of a
 /// contiguous region of arbitrary memory.
-pub trait Span: Deref<Target = [u8]> + Sized {
+pub trait Span: Deref<Target = [u8]> + Sized + sealed::Sealed {
     /// Get the length of the allocated region.
     fn len(&self) -> usize;
 
