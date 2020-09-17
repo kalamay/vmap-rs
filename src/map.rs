@@ -3,6 +3,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, Result};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
+use std::slice;
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut};
@@ -25,9 +26,7 @@ use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut}
 /// # Ok(())
 /// # }
 /// ```
-pub struct Map {
-    base: MapMut,
-}
+pub struct Map(MapMut);
 
 fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     if f.metadata()?.len() < off as u64 + len as u64 {
@@ -206,9 +205,7 @@ impl Map {
     /// # }
     /// ```
     pub unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self {
-        Self {
-            base: MapMut::from_ptr(ptr, len),
-        }
+        Self(MapMut::from_ptr(ptr, len))
     }
 
     /// Transfer ownership of the map into a mutable map.
@@ -249,15 +246,15 @@ impl Map {
     /// ```
     pub fn make_mut(self) -> Result<MapMut> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.base.ptr, self.base.len);
+            let (ptr, len) = AllocSize::new().bounds(self.0.ptr, self.0.len);
             protect(ptr, len, Protect::ReadWrite)?;
         }
-        Ok(self.base)
+        Ok(self.0)
     }
 
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
-        self.base.advise(access, usage)
+        self.0.advise(access, usage)
     }
 
     /// Updates the advise for a specific range of the mapped region.
@@ -268,39 +265,39 @@ impl Map {
         access: AdviseAccess,
         usage: AdviseUsage,
     ) -> Result<()> {
-        self.base.advise_range(off, len, access, usage)
+        self.0.advise_range(off, len, access, usage)
     }
 
     /// Lock all mapped physical pages into memory.
     pub fn lock(&self) -> Result<()> {
-        self.base.lock()
+        self.0.lock()
     }
 
     /// Lock a range of physical pages into memory.
     pub fn lock_range(&self, off: usize, len: usize) -> Result<()> {
-        self.base.lock_range(off, len)
+        self.0.lock_range(off, len)
     }
 
     /// Unlock all mapped physical pages into memory.
     pub fn unlock(&self) -> Result<()> {
-        self.base.unlock()
+        self.0.unlock()
     }
 
     /// Unlock a range of physical pages into memory.
     pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
-        self.base.unlock_range(off, len)
+        self.0.unlock_range(off, len)
     }
 }
 
 impl Span for Map {
     #[inline]
     fn len(&self) -> usize {
-        self.base.len()
+        self.0.len()
     }
 
     #[inline]
     fn as_ptr(&self) -> *const u8 {
-        self.base.as_ptr()
+        self.0.as_ptr()
     }
 }
 
@@ -309,22 +306,22 @@ impl Deref for Map {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        self.as_slice()
+        unsafe { slice::from_raw_parts(self.0.ptr, self.0.len) }
     }
 }
 
 impl AsRef<[u8]> for Map {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.as_slice()
+        self.deref()
     }
 }
 
 impl fmt::Debug for Map {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Map")
-            .field("ptr", &self.base.ptr)
-            .field("len", &self.base.len)
+            .field("ptr", &self.0.ptr)
+            .field("len", &self.0.len)
             .finish()
     }
 }
@@ -560,7 +557,7 @@ impl MapMut {
             let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
             protect(ptr, len, Protect::ReadWrite)?;
         }
-        Ok(Map { base: self })
+        Ok(Map(self))
     }
 
     /// Writes modifications back to the filesystem.
@@ -673,27 +670,27 @@ impl Deref for MapMut {
 
     #[inline]
     fn deref(&self) -> &[u8] {
-        self.as_slice()
+        unsafe { slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 impl DerefMut for MapMut {
     #[inline]
     fn deref_mut(&mut self) -> &mut [u8] {
-        self.as_mut_slice()
+        unsafe { slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 
 impl AsRef<[u8]> for MapMut {
     #[inline]
     fn as_ref(&self) -> &[u8] {
-        self.as_slice()
+        self.deref()
     }
 }
 
 impl AsMut<[u8]> for MapMut {
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
-        self.as_mut_slice()
+        self.deref_mut()
     }
 }
