@@ -51,18 +51,7 @@
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Low-level cross-platform virtual memory functions
-pub mod os {
-    #[cfg(unix)]
-    mod unix;
-    #[cfg(unix)]
-    pub use self::unix::*;
-
-    #[cfg(windows)]
-    mod windows;
-    #[cfg(windows)]
-    pub use self::windows::*;
-}
+pub mod os;
 
 mod error;
 pub use self::error::{ConvertResult, Error, Input, KernelResult, Operation, Result};
