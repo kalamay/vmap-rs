@@ -16,7 +16,7 @@ mod buffer;
 pub use self::buffer::*;
 
 use std::cmp;
-use std::io::{BufRead, Result};
+use std::io::{self, BufRead};
 use std::slice;
 
 /// Common input trait for all buffers.
@@ -48,7 +48,7 @@ pub trait SeqRead: BufRead {
     }
 
     /// Perform a read and consume from the read slice.
-    fn read_from(&mut self, into: &mut [u8]) -> Result<usize> {
+    fn read_from(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let len = {
             let src = self.as_read_slice(into.len());
             let len = src.len();
@@ -99,7 +99,7 @@ pub trait SeqWrite {
     }
 
     /// Perform a write and feed into the write slice.
-    fn write_into(&mut self, from: &[u8]) -> Result<usize> {
+    fn write_into(&mut self, from: &[u8]) -> io::Result<usize> {
         let len = {
             let dst = self.as_write_slice(from.len());
             let len = dst.len();

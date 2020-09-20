@@ -20,11 +20,12 @@
 //! use std::path::PathBuf;
 //! # use std::fs;
 //!
-//! # fn main() -> std::io::Result<()> {
+//! # fn main() -> vmap::Result<()> {
 //! # let tmp = tempdir::TempDir::new("vmap")?;
 //! let path: PathBuf = /* path to file */
 //! # tmp.path().join("example");
 //! # fs::write(&path, b"this is a test")?;
+//! // Open with write permissions so the Map can be converted into a MapMut
 //! let file = OpenOptions::new().read(true).write(true).open(&path)?;
 //!
 //! // Map the beginning of the file
@@ -33,14 +34,14 @@
 //!
 //! // Move the Map into a MapMut
 //! // ... we could have started with MapMut::file(...)
-//! let mut map = map.make_mut()?;
+//! let mut map = map.into_map_mut()?;
 //! {
 //!     let mut data = &mut map[..];
 //!     data.write_all(b"that")?;
 //! }
 //!
 //! // Move the MapMut back into a Map
-//! let map = map.make_read_only()?;
+//! let map = map.into_map()?;
 //! assert_eq!(b"that is a test", &map[..]);
 //! # Ok(())
 //! # }
@@ -62,6 +63,9 @@ pub mod os {
     #[cfg(windows)]
     pub use self::windows::*;
 }
+
+mod error;
+pub use self::error::{ConvertResult, Error, Input, KernelResult, Operation, Result};
 
 mod span;
 pub use self::span::{Span, SpanMut};

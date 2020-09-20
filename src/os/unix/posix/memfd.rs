@@ -1,5 +1,6 @@
-use std::io::{Error, Result};
 use std::os::raw::c_int;
+
+use crate::{Error, Operation, Result};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn memfd_open() -> Result<c_int> {
@@ -13,7 +14,7 @@ pub fn memfd_open() -> Result<c_int> {
         )
     };
     if fd < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Operation::MemoryFd))
     } else {
         Ok(fd as c_int)
     }
@@ -42,7 +43,7 @@ pub fn memfd_open() -> Result<c_int> {
 
         let fd = unsafe { libc::shm_open(path.as_ptr(), OFLAGS, 0600) };
         if fd < 0 {
-            let err = Error::last_os_error();
+            let err = Error::last_os_error(Operation::MemoryFd);
             if err.raw_os_error() != Some(libc::EEXIST) {
                 return Err(err);
             }

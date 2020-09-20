@@ -1,6 +1,7 @@
 use super::{Ring, SeqRead, SeqWrite};
+use crate::Result;
 
-use std::io::{BufRead, Error, ErrorKind, Read, Result, Write};
+use std::io::{self, BufRead, ErrorKind, Read, Write};
 
 /// The `BufReader` adds buffering to any reader using a specialized buffer.
 ///
@@ -21,7 +22,7 @@ use std::io::{BufRead, Error, ErrorKind, Read, Result, Write};
 /// # let srv = TcpListener::bind("127.0.0.1:0")?;
 /// let sock = TcpStream::connect(srv.local_addr().unwrap())?;
 /// # let (mut cli, _addr) = srv.accept()?;
-/// let mut buf = BufReader::new(sock, 4000)?;
+/// let mut buf = BufReader::new(sock, 4000).expect("failed to create buffer");
 /// # cli.write_all(b"hello\nworld\n")?;
 /// let mut line = String::new();
 /// let len = buf.read_line(&mut line)?;
@@ -80,7 +81,7 @@ impl<R: Read> BufReader<R> {
 }
 
 impl<R: Read> Read for BufReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // If the reader has been dequeued and the destination buffer is larger
         // than the internal buffer, then read directly into the destination.
         if self.buf.read_len() == 0 && buf.len() >= self.buf.write_capacity() {
@@ -96,7 +97,7 @@ impl<R: Read> Read for BufReader<R> {
 }
 
 impl<R: Read> BufRead for BufReader<R> {
-    fn fill_buf(&mut self) -> Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if self.buf.read_len() <= self.lowat {
             let n = self.inner.read(self.buf.as_write_slice(std::usize::MAX))?;
             self.buf.feed(n);
@@ -129,11 +130,11 @@ impl<R: Read> BufRead for BufReader<R> {
 /// let send = /* accepted socked */
 /// # srv.accept()?.0;
 ///
-/// let mut wr = BufWriter::new(send, 4000)?;
+/// let mut wr = BufWriter::new(send, 4000).unwrap();
 /// wr.write_all(b"hello\nworld\n")?;
 /// wr.flush()?;
 ///
-/// let mut rd = BufReader::new(recv, 4000)?;
+/// let mut rd = BufReader::new(recv, 4000).unwrap();
 /// let mut line = String::new();
 /// let len = rd.read_line(&mut line)?;
 /// assert_eq!(line, "hello\n");
@@ -167,12 +168,12 @@ impl<W: Write> BufWriter<W> {
     }
 
     /// Unwraps this `BufWriter`, returning the underlying writer.
-    pub fn into_inner(mut self) -> Result<W> {
+    pub fn into_inner(mut self) -> io::Result<W> {
         self.flush_buf()?;
         Ok(self.inner.take().unwrap())
     }
 
-    fn flush_buf(&mut self) -> Result<()> {
+    fn flush_buf(&mut self) -> io::Result<()> {
         let mut written = 0;
         let len = self.buf.read_len();
         let mut ret = Ok(());
@@ -187,10 +188,7 @@ impl<W: Write> BufWriter<W> {
 
             match r {
                 Ok(0) => {
-                    ret = Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write the buffered data",
-                    ));
+                    ret = Err(ErrorKind::WriteZero.into());
                     break;
                 }
                 Ok(n) => written += n,
@@ -217,7 +215,7 @@ impl<W: Write> Drop for BufWriter<W> {
 }
 
 impl<W: Write> Write for BufWriter<W> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if buf.len() > self.buf.write_len() {
             self.flush_buf()?;
         }
@@ -230,7 +228,8 @@ impl<W: Write> Write for BufWriter<W> {
             self.buf.write(buf)
         }
     }
-    fn flush(&mut self) -> Result<()> {
+
+    fn flush(&mut self) -> io::Result<()> {
         self.flush_buf().and_then(|()| self.get_mut().flush())
     }
 }

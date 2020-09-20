@@ -1,9 +1,9 @@
 use super::{SeqRead, SeqWrite};
 use crate::os::{map_ring, unmap_ring};
-use crate::AllocSize;
+use crate::{AllocSize, Result};
 
 use std::cmp;
-use std::io::{BufRead, Read, Result, Write};
+use std::io::{self, BufRead, Read, Write};
 
 /// Fixed-size reliable read/write buffer with sequential address mapping.
 ///
@@ -26,7 +26,7 @@ use std::io::{BufRead, Read, Result, Write};
 /// use std::io::{BufRead, Read, Write};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// let mut buf = Ring::new(4000)?;
+/// let mut buf = Ring::new(4000).unwrap();
 /// let mut i = 1;
 /// while buf.write_len() > 20 {
 ///     write!(&mut buf, "this is test line {}\n", i)?;
@@ -107,7 +107,7 @@ impl SeqWrite for Ring {
 }
 
 impl BufRead for Ring {
-    fn fill_buf(&mut self) -> Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         Ok(self.as_read_slice(std::usize::MAX))
     }
 
@@ -117,17 +117,17 @@ impl BufRead for Ring {
 }
 
 impl Read for Ring {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_from(buf)
     }
 }
 
 impl Write for Ring {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_into(buf)
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -152,7 +152,7 @@ impl Write for Ring {
 /// use std::io::{BufRead, Read, Write};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// let mut buf = InfiniteRing::new(4000)?;
+/// let mut buf = InfiniteRing::new(4000).unwrap();
 /// let mut i = 1;
 /// let mut total = 0;
 /// while total < buf.write_capacity() {
@@ -237,7 +237,7 @@ impl SeqWrite for InfiniteRing {
 }
 
 impl BufRead for InfiniteRing {
-    fn fill_buf(&mut self) -> Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         Ok(self.as_read_slice(std::usize::MAX))
     }
 
@@ -247,17 +247,17 @@ impl BufRead for InfiniteRing {
 }
 
 impl Read for InfiniteRing {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_from(buf)
     }
 }
 
 impl Write for InfiniteRing {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_into(buf)
     }
 
-    fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         let len = {
             let dst = self.as_write_slice(buf.len());
             let len = dst.len();
@@ -269,7 +269,7 @@ impl Write for InfiniteRing {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

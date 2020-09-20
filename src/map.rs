@@ -1,13 +1,15 @@
 use std::convert::TryFrom;
 use std::fmt;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, Result};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::slice;
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
-use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut};
+use crate::{
+    AdviseAccess, AdviseUsage, AllocSize, ConvertResult, Error, Flush, Input, Operation, Protect,
+    Result, Span, SpanMut,
+};
 
 /// Allocation of one or more read-only sequential pages.
 ///
@@ -18,7 +20,7 @@ use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut}
 /// use vmap::{Map, AdviseAccess, AdviseUsage};
 /// use std::fs::OpenOptions;
 ///
-/// # fn main() -> std::io::Result<()> {
+/// # fn main() -> vmap::Result<()> {
 /// let file = OpenOptions::new().read(true).open("README.md")?;
 /// let page = Map::file(&file, 113, 30)?;
 /// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
@@ -30,10 +32,15 @@ use crate::{AdviseAccess, AdviseUsage, AllocSize, Flush, Protect, Span, SpanMut}
 pub struct Map(MapMut);
 
 fn file_checked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    if f.metadata()?.len() < off as u64 + len as u64 {
-        Err(Error::new(ErrorKind::InvalidInput, "map range not in file"))
-    } else {
-        unsafe { file_unchecked(f, off, len, prot) }
+    match f.metadata() {
+        Err(e) => Err(Error::io(Operation::MapFile, e)),
+        Ok(ref md) => {
+            if md.len() < off as u64 + len as u64 {
+                Err(Error::input(Operation::MapFile, Input::InvalidRange))
+            } else {
+                unsafe { file_unchecked(f, off, len, prot) }
+            }
+        }
     }
 }
 
@@ -43,15 +50,16 @@ fn file_max(
     mut maxlen: usize,
     prot: Protect,
 ) -> Result<Option<(*mut u8, usize)>> {
-    let len = f.metadata()?.len();
-    if len <= off as u64 {
-        Ok(None)
-    } else {
-        maxlen = std::cmp::min((len - (off as u64)) as usize, maxlen);
-        Ok(Some((
-            unsafe { file_unchecked(f, off, maxlen, prot) }?,
-            maxlen,
-        )))
+    match f.metadata() {
+        Err(e) => Err(Error::io(Operation::MapFile, e)),
+        Ok(ref md) if md.len() <= off as u64 => Ok(None),
+        Ok(ref md) => {
+            maxlen = std::cmp::min((md.len() - (off as u64)) as usize, maxlen);
+            Ok(Some((
+                unsafe { file_unchecked(f, off, maxlen, prot) }?,
+                maxlen,
+            )))
+        }
     }
 }
 
@@ -66,23 +74,34 @@ unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Res
 impl Map {
     /// Creates a new read-only map object using the full range of a file.
     ///
+    /// The underlying file handle is open as read-only. If there is a need to
+    /// convert the `Map` into a `MapMut`, use `Map::file` with a file handle
+    /// open for writing. If not done, the convertion to `MapMut` will fail.
+    ///
     /// # Example
     /// ```
     /// # extern crate vmap;
     /// use std::fs::OpenOptions;
     /// use vmap::Map;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let map = Map::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    ///
+    /// // The file handle is read-only.
+    /// assert!(map.into_map_mut().is_err());
     /// # Ok(())
     /// # }
     /// ```
     pub fn open<P: AsRef<Path> + ?Sized>(path: &P) -> Result<Self> {
-        let file = OpenOptions::new().read(true).open(path)?;
-        let size = file.metadata()?.len();
-        unsafe { Self::file_unchecked(&file, 0, size as usize) }
+        match OpenOptions::new().read(true).open(path) {
+            Err(e) => Err(Error::io(Operation::MapFile, e)),
+            Ok(file) => match file.metadata() {
+                Err(e) => Err(Error::io(Operation::MapFile, e)),
+                Ok(data) => unsafe { Self::file_unchecked(&file, 0, data.len() as usize) },
+            },
+        }
     }
 
     /// Create a new map object from a range of a file.
@@ -94,7 +113,7 @@ impl Map {
     /// use std::fs::OpenOptions;
     /// use vmap::Map;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
     /// let map = Map::file(&file, 0, 143)?;
     /// assert_eq!(map.is_empty(), false);
@@ -122,7 +141,7 @@ impl Map {
     /// use std::fs::OpenOptions;
     /// use vmap::Map;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
     /// let map = Map::file_max(&file, 0, 5000)?.expect("should be valid range");
     /// assert_eq!(map.is_empty(), false);
@@ -160,7 +179,7 @@ impl Map {
     /// use std::fs::OpenOptions;
     /// use vmap::Map;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
     /// let map = unsafe {
     ///     Map::file_unchecked(&file, 0, file.metadata()?.len() as usize + 1)?
@@ -194,7 +213,7 @@ impl Map {
     /// use vmap::{Map, Protect};
     /// use std::fs::OpenOptions;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = unsafe {
     ///     let len = vmap::allocation_size();
@@ -225,10 +244,10 @@ impl Map {
     /// use std::path::PathBuf;
     /// # use std::fs;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
     /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("make_mut");
+    /// # tmp.path().join("into_map_mut");
     /// # fs::write(&path, b"this is a test")?;
     /// let file = OpenOptions::new().read(true).write(true).open(&path)?;
     ///
@@ -236,7 +255,7 @@ impl Map {
     /// let map = Map::file(&file, 0, 14)?;
     /// assert_eq!(b"this is a test", &map[..]);
     ///
-    /// let mut map = map.make_mut()?;
+    /// let mut map = map.into_map_mut()?;
     /// {
     ///     let mut data = &mut map[..];
     ///     data.write_all(b"that")?;
@@ -245,12 +264,27 @@ impl Map {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn make_mut(self) -> Result<MapMut> {
+    pub fn into_map_mut(self) -> ConvertResult<MapMut, Self> {
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.0.ptr, self.0.len);
-            protect(ptr, len, Protect::ReadWrite)?;
+            match protect(ptr, len, Protect::ReadWrite) {
+                Ok(()) => Ok(self.0),
+                Err(err) => Err((err, self)),
+            }
         }
-        Ok(self.0)
+    }
+
+    /// Transfer ownership of the map into a mutable map.
+    ///
+    /// This will change the protection of the mapping. If the original file
+    /// was not opened with write permissions, this will error.
+    ///
+    /// This will cause the original map to be dropped if the protection change
+    /// fails. Using `into_map_mut` allows the original map to be retained in the
+    /// case of a failure.
+    #[deprecated(since = "0.4", note = "use try_into or into_map_mut instead")]
+    pub fn make_mut(self) -> Result<MapMut> {
+        Ok(self.into_map_mut()?)
     }
 
     /// Updates the advise for the entire mapped region..
@@ -319,10 +353,10 @@ impl AsRef<[u8]> for Map {
 }
 
 impl TryFrom<MapMut> for Map {
-    type Error = std::io::Error;
+    type Error = (Error, MapMut);
 
-    fn try_from(map: MapMut) -> Result<Map> {
-        map.make_read_only()
+    fn try_from(map: MapMut) -> ConvertResult<Self, MapMut> {
+        map.into_map()
     }
 }
 
@@ -352,7 +386,7 @@ impl MapMut {
     /// use vmap::{MapMut, Protect};
     /// use std::io::Write;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let mut map = MapMut::new(200, Protect::ReadCopy)?;
     /// {
     ///     let mut data = &mut map[..];
@@ -379,7 +413,7 @@ impl MapMut {
     /// use std::fs::OpenOptions;
     /// use vmap::MapMut;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let map = MapMut::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
@@ -387,9 +421,13 @@ impl MapMut {
     /// # }
     /// ```
     pub fn open<P: AsRef<Path> + ?Sized>(path: &P) -> Result<Self> {
-        let file = OpenOptions::new().read(true).write(true).open(path)?;
-        let size = file.metadata()?.len();
-        unsafe { Self::file_unchecked(&file, 0, size as usize) }
+        match OpenOptions::new().read(true).write(true).open(path) {
+            Err(e) => Err(Error::io(Operation::MapFile, e)),
+            Ok(file) => match file.metadata() {
+                Err(e) => Err(Error::io(Operation::MapFile, e)),
+                Ok(data) => unsafe { Self::file_unchecked(&file, 0, data.len() as usize) },
+            },
+        }
     }
 
     /// Create a new mutable map object from a range of a file.
@@ -437,7 +475,7 @@ impl MapMut {
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let mut map = MapMut::copy(&file, 33, 30)?;
     /// assert_eq!(map.is_empty(), false);
@@ -507,10 +545,10 @@ impl MapMut {
     /// use std::fs::{self, OpenOptions};
     /// use std::path::PathBuf;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
     /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("make_mut");
+    /// # tmp.path().join("into_map_mut");
     /// # fs::write(&path, b"this is a test")?;
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let page = unsafe {
@@ -542,10 +580,10 @@ impl MapMut {
     /// use std::path::PathBuf;
     /// # use std::fs;
     ///
-    /// # fn main() -> std::io::Result<()> {
+    /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
     /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("make_mut");
+    /// # tmp.path().join("into_map_mut");
     /// # fs::write(&path, b"this is a test")?;
     /// let file = OpenOptions::new().read(true).write(true).open(&path)?;
     ///
@@ -556,17 +594,32 @@ impl MapMut {
     ///     data.write_all(b"that")?;
     /// }
     ///
-    /// let map = map.make_read_only()?;
+    /// let map = map.into_map()?;
     /// assert_eq!(b"that is a test", &map[..]);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn make_read_only(self) -> Result<Map> {
+    pub fn into_map(self) -> ConvertResult<Map, Self> {
         unsafe {
             let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
-            protect(ptr, len, Protect::ReadWrite)?;
+            match protect(ptr, len, Protect::ReadWrite) {
+                Ok(()) => Ok(Map(self)),
+                Err(err) => Err((err, self)),
+            }
         }
-        Ok(Map(self))
+    }
+
+    /// Transfer ownership of the map into a mutable map.
+    ///
+    /// This will change the protection of the mapping. If the original file
+    /// was not opened with write permissions, this will error.
+    ///
+    /// This will cause the original map to be dropped if the protection change
+    /// fails. Using `into_map` allows the original map to be retained in the
+    /// case of a failure.
+    #[deprecated(since = "0.4", note = "use try_into or into_map instead")]
+    pub fn make_read_only(self) -> Result<Map> {
+        Ok(self.into_map()?)
     }
 
     /// Writes modifications back to the filesystem.
@@ -597,11 +650,12 @@ impl MapMut {
         usage: AdviseUsage,
     ) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
-        }
-        unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
-            advise(ptr, len, access, usage)
+            Err(Error::input(Operation::Advise, Input::InvalidRange))
+        } else {
+            unsafe {
+                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                advise(ptr, len, access, usage)
+            }
         }
     }
 
@@ -616,11 +670,12 @@ impl MapMut {
     /// Lock a range of physical pages into memory.
     pub fn lock_range(&self, off: usize, len: usize) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
-        }
-        unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
-            lock(ptr, len)
+            Err(Error::input(Operation::Lock, Input::InvalidRange))
+        } else {
+            unsafe {
+                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                lock(ptr, len)
+            }
         }
     }
 
@@ -635,11 +690,12 @@ impl MapMut {
     /// Unlock a range of physical pages into memory.
     pub fn unlock_range(&self, off: usize, len: usize) -> Result<()> {
         if off + len > self.len {
-            return Err(Error::new(ErrorKind::InvalidInput, "range not in map"));
-        }
-        unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
-            unlock(ptr, len)
+            Err(Error::input(Operation::Unlock, Input::InvalidRange))
+        } else {
+            unsafe {
+                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                unlock(ptr, len)
+            }
         }
     }
 }
@@ -705,9 +761,9 @@ impl AsMut<[u8]> for MapMut {
 }
 
 impl TryFrom<Map> for MapMut {
-    type Error = std::io::Error;
+    type Error = (Error, Map);
 
-    fn try_from(map: Map) -> Result<MapMut> {
-        map.make_mut()
+    fn try_from(map: Map) -> ConvertResult<Self, Map> {
+        map.into_map_mut()
     }
 }

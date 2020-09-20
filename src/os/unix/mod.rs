@@ -1,7 +1,6 @@
 use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
 
 use std::fs::File;
-use std::io::{Error, Result};
 use std::os::unix::io::AsRawFd;
 use std::ptr;
 
@@ -10,6 +9,10 @@ use libc::{
     MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MAP_ANON, MAP_FAILED, MAP_PRIVATE,
     MAP_SHARED, MS_ASYNC, MS_SYNC, PROT_READ, PROT_WRITE, _SC_PAGESIZE,
 };
+
+use crate::{Error, Operation, Result};
+
+use self::Operation::*;
 
 // For macOS and iOS we use the mach vm system for rings. The posix module
 // does work correctly on these targets, but it necessitates an otherwise
@@ -35,9 +38,9 @@ pub fn allocation_size() -> usize {
     page_size()
 }
 
-fn result(pg: *mut c_void) -> Result<*mut u8> {
+fn result(op: Operation, pg: *mut c_void) -> Result<*mut u8> {
     if pg == MAP_FAILED {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(op))
     } else {
         Ok(pg as *mut u8)
     }
@@ -50,14 +53,17 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_PRIVATE),
     };
-    result(mmap(
-        ptr::null_mut(),
-        len,
-        prot,
-        flags,
-        file.as_raw_fd(),
-        off as off_t,
-    ))
+    result(
+        MapFile,
+        mmap(
+            ptr::null_mut(),
+            len,
+            prot,
+            flags,
+            file.as_raw_fd(),
+            off as off_t,
+        ),
+    )
 }
 
 /// Creates an anonymous allocation.
@@ -67,13 +73,13 @@ pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE),
     };
-    result(mmap(ptr::null_mut(), len, prot, flags, -1, 0))
+    result(MapAnonymous, mmap(ptr::null_mut(), len, prot, flags, -1, 0))
 }
 
 /// Unmaps a page range from a previos mapping.
 pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
     if munmap(pg as *mut c_void, len) < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Unmap))
     } else {
         Ok(())
     }
@@ -87,7 +93,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
         Protect::ReadCopy => PROT_READ | PROT_WRITE,
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Protect))
     } else {
         Ok(())
     }
@@ -100,7 +106,7 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
         Flush::Async => MS_ASYNC,
     };
     if msync(pg as *mut c_void, len, flags) < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Flush))
     } else {
         Ok(())
     }
@@ -124,7 +130,7 @@ pub unsafe fn advise(
     };
 
     if madvise(pg as *mut c_void, len, adv) < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Advise))
     } else {
         Ok(())
     }
@@ -133,7 +139,7 @@ pub unsafe fn advise(
 /// Locks physical pages into memory.
 pub unsafe fn lock(pg: *mut u8, len: usize) -> Result<()> {
     if mlock(pg as *mut c_void, len) < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Lock))
     } else {
         Ok(())
     }
@@ -142,7 +148,7 @@ pub unsafe fn lock(pg: *mut u8, len: usize) -> Result<()> {
 /// Unlocks physical pages from memory.
 pub unsafe fn unlock(pg: *mut u8, len: usize) -> Result<()> {
     if munlock(pg as *mut c_void, len) < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Unlock))
     } else {
         Ok(())
     }
