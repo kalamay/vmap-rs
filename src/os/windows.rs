@@ -87,21 +87,12 @@ impl Drop for MapHandle {
     }
 }
 
-/// Requests the page size from the system.
-pub fn page_size() -> usize {
+/// Requests the page size and allocation granularity from the system.
+pub fn system_info() -> (u32, u32) {
     unsafe {
         let mut info: SYSTEM_INFO = mem::uninitialized();
         GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        info.dwPageSize as usize
-    }
-}
-
-/// Requests the allocation granularity from the system.
-pub fn allocation_size() -> usize {
-    unsafe {
-        let mut info: SYSTEM_INFO = mem::uninitialized();
-        GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        info.dwAllocationGranularity as usize
+        (info.dwPageSize, info.dwAllocationGranularity)
     }
 }
 

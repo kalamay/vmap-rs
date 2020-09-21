@@ -7,8 +7,8 @@ use std::slice;
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::{
-    AdviseAccess, AdviseUsage, AllocSize, ConvertResult, Error, Flush, Input, Operation, Protect,
-    Result, Span, SpanMut,
+    AdviseAccess, AdviseUsage, ConvertResult, Error, Flush, Input, Operation, Protect, Result,
+    Size, Span, SpanMut,
 };
 
 /// Allocation of one or more read-only sequential pages.
@@ -64,7 +64,7 @@ fn file_max(
 }
 
 unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    let sz = AllocSize::new();
+    let sz = Size::allocation();
     let roff = sz.truncate(off);
     let rlen = sz.round(len + (off - roff));
     let ptr = map_file(f, roff, rlen, prot)?;
@@ -266,7 +266,7 @@ impl Map {
     /// ```
     pub fn into_map_mut(self) -> ConvertResult<MapMut, Self> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.0.ptr, self.0.len);
+            let (ptr, len) = Size::page().bounds(self.0.ptr, self.0.len);
             match protect(ptr, len, Protect::ReadWrite) {
                 Ok(()) => Ok(self.0),
                 Err(err) => Err((err, self)),
@@ -399,7 +399,7 @@ impl MapMut {
     /// ```
     pub fn new(hint: usize, prot: Protect) -> Result<Self> {
         unsafe {
-            let len = AllocSize::new().round(hint);
+            let len = Size::allocation().round(hint);
             let ptr = map_anon(len, prot)?;
             Ok(Self::from_ptr(ptr, len))
         }
@@ -601,7 +601,7 @@ impl MapMut {
     /// ```
     pub fn into_map(self) -> ConvertResult<Map, Self> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             match protect(ptr, len, Protect::ReadWrite) {
                 Ok(()) => Ok(Map(self)),
                 Err(err) => Err((err, self)),
@@ -628,7 +628,7 @@ impl MapMut {
     /// return any errors with doing so.
     pub fn flush(&self, file: &File, mode: Flush) -> Result<()> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             flush(ptr, file, len, mode)
         }
     }
@@ -636,7 +636,7 @@ impl MapMut {
     /// Updates the advise for the entire mapped region..
     pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             advise(ptr, len, access, usage)
         }
     }
@@ -653,7 +653,7 @@ impl MapMut {
             Err(Error::input(Operation::Advise, Input::InvalidRange))
         } else {
             unsafe {
-                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                let (ptr, len) = Size::page().bounds(self.ptr.add(off), len);
                 advise(ptr, len, access, usage)
             }
         }
@@ -662,7 +662,7 @@ impl MapMut {
     /// Lock all mapped physical pages into memory.
     pub fn lock(&self) -> Result<()> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             lock(ptr, len)
         }
     }
@@ -673,7 +673,7 @@ impl MapMut {
             Err(Error::input(Operation::Lock, Input::InvalidRange))
         } else {
             unsafe {
-                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                let (ptr, len) = Size::page().bounds(self.ptr.add(off), len);
                 lock(ptr, len)
             }
         }
@@ -682,7 +682,7 @@ impl MapMut {
     /// Unlock all mapped physical pages into memory.
     pub fn unlock(&self) -> Result<()> {
         unsafe {
-            let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             unlock(ptr, len)
         }
     }
@@ -693,7 +693,7 @@ impl MapMut {
             Err(Error::input(Operation::Unlock, Input::InvalidRange))
         } else {
             unsafe {
-                let (ptr, len) = AllocSize::new().bounds(self.ptr.add(off), len);
+                let (ptr, len) = Size::page().bounds(self.ptr.add(off), len);
                 unlock(ptr, len)
             }
         }
@@ -723,7 +723,7 @@ impl Drop for MapMut {
     fn drop(&mut self) {
         unsafe {
             if self.len > 0 {
-                let (ptr, len) = AllocSize::new().bounds(self.ptr, self.len);
+                let (ptr, len) = Size::allocation().bounds(self.ptr, self.len);
                 unmap(ptr, len).unwrap_or_default();
             }
         }

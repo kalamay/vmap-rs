@@ -109,18 +109,21 @@ pub enum AdviseUsage {
 
 /// Gets a cached version of the system page size.
 ///
+/// # Example
+///
 /// ```
 /// # extern crate vmap;
-/// println!("the system page size is {} bytes", vmap::page_size());
+/// let page_size = vmap::page_size();
+/// println!("the system page size is {} bytes", page_size);
+/// assert!(page_size >= 4096);
 /// ```
 pub fn page_size() -> usize {
-    static SIZE: AtomicUsize = AtomicUsize::new(0);
-    let mut size: usize = SIZE.load(Ordering::Relaxed);
+    let size = PAGE_SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = crate::os::page_size();
-        SIZE.store(size, Ordering::Relaxed);
+        load_system_info().0 as usize
+    } else {
+        size
     }
-    size
 }
 
 /// Gets a cached version of the system allocation granularity size.
@@ -128,21 +131,39 @@ pub fn page_size() -> usize {
 /// On Windows this value is typically 64k. Otherwise it is the same as the
 /// page size.
 ///
+/// # Example
+///
 /// ```
 /// # extern crate vmap;
-/// println!("the system allocation granularity is {} bytes", vmap::allocation_size());
+/// let alloc_size = vmap::allocation_size();
+/// println!("the system allocation granularity is {} bytes", alloc_size);
+/// if cfg!(windows) {
+///     assert!(alloc_size >= 65536);
+/// } else {
+///     assert!(alloc_size >= 4096);
+/// }
 /// ```
 pub fn allocation_size() -> usize {
-    static SIZE: AtomicUsize = AtomicUsize::new(0);
-    let mut size: usize = SIZE.load(Ordering::Relaxed);
+    let size = ALLOC_SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = crate::os::allocation_size();
-        SIZE.store(size, Ordering::Relaxed);
+        load_system_info().1 as usize
+    } else {
+        size
     }
-    size
 }
 
-/// Type for calculation page size information.
+static PAGE_SIZE: AtomicUsize = AtomicUsize::new(0);
+static ALLOC_SIZE: AtomicUsize = AtomicUsize::new(0);
+
+#[inline]
+fn load_system_info() -> (u32, u32) {
+    let (page, alloc) = self::os::system_info();
+    PAGE_SIZE.store(page as usize, Ordering::Relaxed);
+    ALLOC_SIZE.store(alloc as usize, Ordering::Relaxed);
+    (page, alloc)
+}
+
+/// Type for calculation system page or allocation size information.
 ///
 /// # Example
 ///
@@ -161,16 +182,57 @@ pub fn allocation_size() -> usize {
 /// let size = size.size(3);
 /// println!("3 pages are {} bytes", size);
 /// ```
-#[derive(Copy, Clone)]
-pub struct AllocSize(usize);
+#[deprecated(since = "0.4", note = "use Size instead")]
+pub type AllocSize = Size;
 
-impl AllocSize {
+/// Type for calculation system page or allocation size information.
+///
+/// # Example
+///
+/// ```
+/// # extern crate vmap;
+/// let size = vmap::Size::allocation();
+/// let pages = size.count(200);
+/// assert_eq!(pages, 1);
+///
+/// let round = size.round(200);
+/// println!("200 bytes requires a {} byte mapping", round);
+///
+/// let count = size.count(10000);
+/// println!("10000 bytes requires {} pages", count);
+///
+/// let size = size.size(3);
+/// println!("3 pages are {} bytes", size);
+/// ```
+#[derive(Copy, Clone)]
+pub struct Size(usize);
+
+impl Size {
+    /// Creates a type for calculating allocation numbers and byte offsets.
+    ///
+    /// The size is determined from the system's configurated allocation
+    /// granularity. This value is cached making it very cheap to construct.
+    #[inline]
+    #[deprecated(since = "0.4", note = "use Size::allocation instead")]
+    pub fn new() -> Self {
+        Self::allocation()
+    }
+
     /// Creates a type for calculating page numbers and byte offsets.
     ///
     /// The size is determined from the system's configurated page size.
     /// This value is cached making it very cheap to construct.
     #[inline]
-    pub fn new() -> Self {
+    pub fn page() -> Self {
+        unsafe { Self::with_size(page_size()) }
+    }
+
+    /// Creates a type for calculating allocation numbers and byte offsets.
+    ///
+    /// The size is determined from the system's configurated allocation
+    /// granularity. This value is cached making it very cheap to construct.
+    #[inline]
+    pub fn allocation() -> Self {
         unsafe { Self::with_size(allocation_size()) }
     }
 
@@ -180,22 +242,23 @@ impl AllocSize {
     /// # Safety
     ///
     /// The size *must* be a power-of-2. To successfully map pages, the size
-    /// must also be a mutliple of the actual system page size. Hypothetically
-    /// this could be used to simulate larger page sizes.
+    /// must also be a mutliple of the actual system allocation granularity.
+    /// Hypothetically this could be used to simulate larger page sizes, but
+    /// this has no bearing on the TLB cache.
     ///
     /// # Example
     ///
     /// ```
     /// # extern crate vmap;
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = unsafe { AllocSize::with_size(sys << 2) };
+    /// let size = unsafe { Size::with_size(sys << 2) };
     /// assert_eq!(size.round(1), sys << 2);   // probably 16384
     /// ```
     #[inline]
     pub unsafe fn with_size(size: usize) -> Self {
-        AllocSize(size)
+        Size(size)
     }
 
     /// Round a byte size up to the nearest page size.
@@ -203,10 +266,10 @@ impl AllocSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::allocation();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -223,10 +286,10 @@ impl AllocSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::allocation();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -243,10 +306,10 @@ impl AllocSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::allocation();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
@@ -260,10 +323,10 @@ impl AllocSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::allocation();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
@@ -278,10 +341,10 @@ impl AllocSize {
     /// # Example
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::allocation();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -306,19 +369,19 @@ impl AllocSize {
     }
 }
 
-impl Default for AllocSize {
+impl Default for Size {
     fn default() -> Self {
-        Self::new()
+        Self::allocation()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::AllocSize;
+    use super::Size;
 
     #[test]
     fn allocation_size() {
-        let sz = unsafe { AllocSize::with_size(4096) };
+        let sz = unsafe { Size::with_size(4096) };
         assert_eq!(sz.round(0), 0);
         assert_eq!(sz.round(1), 4096);
         assert_eq!(sz.round(4095), 4096);

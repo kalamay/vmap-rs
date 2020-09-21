@@ -28,14 +28,10 @@ mod posix;
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 pub use self::posix::{map_ring, unmap_ring};
 
-/// Requests the page size from the system.
-pub fn page_size() -> usize {
-    unsafe { sysconf(_SC_PAGESIZE) as usize }
-}
-
-/// Requests the allocation granularity from the system.
-pub fn allocation_size() -> usize {
-    page_size()
+/// Requests the page size and allocation granularity from the system.
+pub fn system_info() -> (u32, u32) {
+    let size = unsafe { sysconf(_SC_PAGESIZE) as u32 };
+    (size, size)
 }
 
 fn result(op: Operation, pg: *mut c_void) -> Result<*mut u8> {

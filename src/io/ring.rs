@@ -1,6 +1,6 @@
 use super::{SeqRead, SeqWrite};
 use crate::os::{map_ring, unmap_ring};
-use crate::{AllocSize, Result};
+use crate::{Result, Size};
 
 use std::cmp;
 use std::io::{self, BufRead, Read, Write};
@@ -57,7 +57,7 @@ impl Ring {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = AllocSize::new().round(hint);
+        let len = Size::allocation().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self {
@@ -186,7 +186,7 @@ impl InfiniteRing {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = AllocSize::new().round(hint);
+        let len = Size::allocation().round(hint);
         unsafe {
             let ptr = map_ring(len)?;
             Ok(Self {
