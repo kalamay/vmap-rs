@@ -153,12 +153,10 @@ impl Error {
     ///     }
     /// }
     ///
-    /// fn main() {
-    ///     // Will print "raw OS error: ...".
-    ///     print_os_error(&Error::last_os_error(Operation::MapFile));
-    ///     // Will print "Not an OS error".
-    ///     print_os_error(&Error::input(Operation::MapFile, Input::InvalidRange));
-    /// }
+    /// // Will print "raw OS error: ...".
+    /// print_os_error(&Error::last_os_error(Operation::MapFile));
+    /// // Will print "Not an OS error".
+    /// print_os_error(&Error::input(Operation::MapFile, Input::InvalidRange));
     /// ```
     pub fn raw_os_error(&self) -> Option<i32> {
         if let Repr::Io(e) = &self.repr {
@@ -180,12 +178,10 @@ impl Error {
     ///     println!("{:?}", err.kind());
     /// }
     ///
-    /// fn main() {
-    ///     // Will print "Other".
-    ///     print_error(Error::last_os_error(Operation::MapFile));
-    ///     // Will print "NotFound".
-    ///     print_error(Error::io(Operation::MapFile, ErrorKind::NotFound.into()));
-    /// }
+    /// // Will print "Other".
+    /// print_error(Error::last_os_error(Operation::MapFile));
+    /// // Will print "NotFound".
+    /// print_error(Error::io(Operation::MapFile, ErrorKind::NotFound.into()));
     /// ```
     pub fn kind(&self) -> io::ErrorKind {
         match self.repr {
@@ -206,10 +202,8 @@ impl Error {
     ///     println!("{:?}", err.operation());
     /// }
     ///
-    /// fn main() {
-    ///     // Will print "MapFile".
-    ///     print_operation(Error::last_os_error(Operation::MapFile));
-    /// }
+    /// // Will print "MapFile".
+    /// print_operation(Error::last_os_error(Operation::MapFile));
     /// ```
     ///
     /// [`Operation`]: enum.Operation.html
@@ -332,10 +326,8 @@ impl Operation {
     ///     println!("failed to {}", op.as_str().unwrap());
     /// }
     ///
-    /// fn main() {
-    ///     // Will print "failed to map file".
-    ///     print_operation(Operation::MapFile);
-    /// }
+    /// // Will print "failed to map file".
+    /// print_operation(Operation::MapFile);
     /// ```
     pub fn as_str(&self) -> Option<&'static str> {
         match *self {
@@ -395,10 +387,8 @@ impl Input {
     ///     println!("failed to {}, {}", op.as_str().unwrap(), input.as_str());
     /// }
     ///
-    /// fn main() {
-    ///     // Will print "failed to map file, invalid range"
-    ///     print_input(Operation::MapFile, Input::InvalidRange);
-    /// }
+    /// // Will print "failed to map file, invalid range"
+    /// print_input(Operation::MapFile, Input::InvalidRange);
     /// ```
     pub fn as_str(&self) -> &'static str {
         match *self {
