@@ -76,45 +76,54 @@ extern "C" {
 /// The length is the size of the sequential range, and the offset of
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
-pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
-    let port = mach_task_self();
+pub fn map_ring(len: usize) -> Result<*mut u8> {
+    let port = unsafe { mach_task_self() };
     let mut addr: vm_address_t = 0;
     let mut len = len as vm_size_t;
     let mut map_port: mem_entry_name_port_t = 0;
 
-    let ret = vm_allocate(port, &mut addr, 2 * len, VM_FLAGS_ANYWHERE);
+    let ret = unsafe { vm_allocate(port, &mut addr, 2 * len, VM_FLAGS_ANYWHERE) };
     if ret != KERN_SUCCESS {
         return Err(Error::kernel(RingAllocate, ret));
     }
 
-    let ret = vm_allocate(port, &mut addr, len, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
+    let ret = unsafe { vm_allocate(port, &mut addr, len, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
         return Err(Error::kernel(RingPrimary, ret));
     }
 
-    let ret = mach_make_memory_entry(port, &mut len, addr, VM_PROT_DEFAULT, &mut map_port, 0);
+    let ret =
+        unsafe { mach_make_memory_entry(port, &mut len, addr, VM_PROT_DEFAULT, &mut map_port, 0) };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
         return Err(Error::kernel(RingEntry, ret));
     }
 
     let mut half = addr + len;
-    let ret = vm_map(
-        port,
-        &mut half,
-        len,
-        0, // mask
-        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
-        map_port,
-        0,     // offset
-        false, // copy
-        VM_PROT_DEFAULT,
-        VM_PROT_DEFAULT,
-        VM_INHERIT_NONE,
-    );
+    let ret = unsafe {
+        vm_map(
+            port,
+            &mut half,
+            len,
+            0, // mask
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            map_port,
+            0,     // offset
+            false, // copy
+            VM_PROT_DEFAULT,
+            VM_PROT_DEFAULT,
+            VM_INHERIT_NONE,
+        )
+    };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
         return Err(Error::kernel(RingSecondary, ret));
     }
 

@@ -19,11 +19,13 @@ use self::Operation::*;
 /// The length is the size of the sequential range, and the offset of
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
-pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
+pub fn map_ring(len: usize) -> Result<*mut u8> {
     // Create a temporary file descriptor truncated to the ring size.
     let fd = tmp_open(len)?;
     let ret = wrap_fd(len, fd);
-    close(fd);
+    unsafe {
+        close(fd);
+    }
     ret
 }
 

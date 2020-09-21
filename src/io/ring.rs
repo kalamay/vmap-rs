@@ -58,15 +58,13 @@ impl Ring {
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
         let len = Size::allocation().round(hint);
-        unsafe {
-            let ptr = map_ring(len)?;
-            Ok(Self {
-                ptr,
-                len,
-                rpos: 0,
-                wpos: 0,
-            })
-        }
+        let ptr = map_ring(len)?;
+        Ok(Self {
+            ptr,
+            len,
+            rpos: 0,
+            wpos: 0,
+        })
     }
 }
 
@@ -187,15 +185,13 @@ impl InfiniteRing {
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
         let len = Size::allocation().round(hint);
-        unsafe {
-            let ptr = map_ring(len)?;
-            Ok(Self {
-                ptr,
-                len,
-                rlen: 0,
-                wpos: 0,
-            })
-        }
+        let ptr = map_ring(len)?;
+        Ok(Self {
+            ptr,
+            len,
+            rlen: 0,
+            wpos: 0,
+        })
     }
 }
 

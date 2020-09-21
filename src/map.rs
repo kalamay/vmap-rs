@@ -398,11 +398,9 @@ impl MapMut {
     /// # }
     /// ```
     pub fn new(hint: usize, prot: Protect) -> Result<Self> {
-        unsafe {
-            let len = Size::allocation().round(hint);
-            let ptr = map_anon(len, prot)?;
-            Ok(Self::from_ptr(ptr, len))
-        }
+        let len = Size::allocation().round(hint);
+        let ptr = map_anon(len, prot)?;
+        unsafe { Ok(Self::from_ptr(ptr, len)) }
     }
 
     /// Creates a new read/write map object using the full range of a file.

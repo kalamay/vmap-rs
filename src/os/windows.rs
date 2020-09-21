@@ -97,7 +97,7 @@ pub fn system_info() -> (u32, u32) {
 }
 
 /// Memory maps a given range of a file.
-pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
+pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
@@ -107,12 +107,14 @@ pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Re
         ),
     };
 
-    let map = MapHandle::new(MapFile, file.as_raw_handle(), prot, 0)?;
-    map.view(MapFile, access, off, len, ptr::null_mut())
+    unsafe {
+        let map = MapHandle::new(MapFile, file.as_raw_handle(), prot, 0)?;
+        map.view(MapFile, access, off, len, ptr::null_mut())
+    }
 }
 
 /// Creates an anonymous allocation.
-pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
+pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
@@ -122,8 +124,10 @@ pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
         ),
     };
 
-    let map = MapHandle::new(MapAnonymous, INVALID_HANDLE_VALUE, prot, 0)?;
-    map.view(MapAnonymous, access, 0, len, ptr::null_mut())
+    unsafe {
+        let map = MapHandle::new(MapAnonymous, INVALID_HANDLE_VALUE, prot, 0)?;
+        map.view(MapAnonymous, access, 0, len, ptr::null_mut())
+    }
 }
 
 unsafe fn reserve(len: usize) -> Result<*mut c_void> {
@@ -158,14 +162,14 @@ unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Resul
 /// The length is the size of the sequential range, and the offset of
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
-pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
+pub fn map_ring(len: usize) -> Result<*mut u8> {
     let full = 2 * len;
-    let map = MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, full, RingAllocate)?;
+    let map = unsafe { MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, full, RingAllocate)? };
 
     let mut n = 0;
     loop {
-        let pg = reserve(full)?;
-        let rc = map_ring_handle(&map, len, pg);
+        let pg = unsafe { reserve(full)? };
+        let rc = unsafe { map_ring_handle(&map, len, pg) };
         if rc.is_ok() || n == 5 {
             return rc;
         }

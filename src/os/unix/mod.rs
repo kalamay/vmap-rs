@@ -43,33 +43,35 @@ fn result(op: Operation, pg: *mut c_void) -> Result<*mut u8> {
 }
 
 /// Memory maps a given range of a file.
-pub unsafe fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
+pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, flags) = match prot {
         Protect::ReadOnly => (PROT_READ, MAP_SHARED),
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_PRIVATE),
     };
-    result(
-        MapFile,
-        mmap(
-            ptr::null_mut(),
-            len,
-            prot,
-            flags,
-            file.as_raw_fd(),
-            off as off_t,
-        ),
-    )
+    unsafe {
+        result(
+            MapFile,
+            mmap(
+                ptr::null_mut(),
+                len,
+                prot,
+                flags,
+                file.as_raw_fd(),
+                off as off_t,
+            ),
+        )
+    }
 }
 
 /// Creates an anonymous allocation.
-pub unsafe fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
+pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, flags) = match prot {
         Protect::ReadOnly => (PROT_READ, MAP_SHARED),
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE),
     };
-    result(MapAnonymous, mmap(ptr::null_mut(), len, prot, flags, -1, 0))
+    unsafe { result(MapAnonymous, mmap(ptr::null_mut(), len, prot, flags, -1, 0)) }
 }
 
 /// Unmaps a page range from a previos mapping.
