@@ -182,7 +182,7 @@ fn load_system_info() -> (u32, u32) {
 /// let size = size.size(3);
 /// println!("3 pages are {} bytes", size);
 /// ```
-#[deprecated(since = "0.4", note = "use Size instead")]
+#[deprecated(since = "0.4.0", note = "use Size instead")]
 pub type AllocSize = Size;
 
 /// Type for calculation system page or allocation size information.
@@ -213,7 +213,7 @@ impl Size {
     /// The size is determined from the system's configurated allocation
     /// granularity. This value is cached making it very cheap to construct.
     #[inline]
-    #[deprecated(since = "0.4", note = "use Size::allocation instead")]
+    #[deprecated(since = "0.4.0", note = "use Size::allocation instead")]
     pub fn new() -> Self {
         Self::allocation()
     }

@@ -282,7 +282,7 @@ impl Map {
     /// This will cause the original map to be dropped if the protection change
     /// fails. Using `into_map_mut` allows the original map to be retained in the
     /// case of a failure.
-    #[deprecated(since = "0.4", note = "use try_into or into_map_mut instead")]
+    #[deprecated(since = "0.4.0", note = "use try_into or into_map_mut instead")]
     pub fn make_mut(self) -> Result<MapMut> {
         Ok(self.into_map_mut()?)
     }
@@ -617,7 +617,7 @@ impl MapMut {
     /// This will cause the original map to be dropped if the protection change
     /// fails. Using `into_map` allows the original map to be retained in the
     /// case of a failure.
-    #[deprecated(since = "0.4", note = "use try_into or into_map instead")]
+    #[deprecated(since = "0.4.0", note = "use try_into or into_map instead")]
     pub fn make_read_only(self) -> Result<Map> {
         Ok(self.into_map()?)
     }
