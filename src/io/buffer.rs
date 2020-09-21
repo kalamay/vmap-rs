@@ -9,7 +9,7 @@ use std::io::{self, BufRead, ErrorKind, Read, Write};
 /// [`Ring`](struct.Ring.html) for the internal buffer, and it provides a
 /// configurable low water mark.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -115,7 +115,7 @@ impl<R: Read> BufRead for BufReader<R> {
 /// This is very similar `std::io::BufWriter`, but it uses a
 /// [`Ring`](struct.Ring.html) for internal the buffer.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;

@@ -8,7 +8,7 @@
 //! Additionally, a variety of buffer implementations are provided in the
 //! [`vmap::io`](io/index.html) module.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```
 //! # extern crate vmap;
@@ -109,7 +109,7 @@ pub enum AdviseUsage {
 
 /// Gets a cached version of the system page size.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -131,7 +131,7 @@ pub fn page_size() -> usize {
 /// On Windows this value is typically 64k. Otherwise it is the same as the
 /// page size.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -165,7 +165,7 @@ fn load_system_info() -> (u32, u32) {
 
 /// Type for calculation system page or allocation size information.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -187,7 +187,7 @@ pub type AllocSize = Size;
 
 /// Type for calculation system page or allocation size information.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -246,7 +246,7 @@ impl Size {
     /// Hypothetically this could be used to simulate larger page sizes, but
     /// this has no bearing on the TLB cache.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -263,7 +263,7 @@ impl Size {
 
     /// Round a byte size up to the nearest page size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use vmap::Size;
@@ -283,7 +283,7 @@ impl Size {
 
     /// Round a byte size down to the nearest page size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use vmap::Size;
@@ -303,7 +303,7 @@ impl Size {
 
     /// Calculate the byte offset from page containing the position.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use vmap::Size;
@@ -320,7 +320,7 @@ impl Size {
 
     /// Convert a page count into a byte size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use vmap::Size;
@@ -338,7 +338,7 @@ impl Size {
 
     /// Covert a byte size into the number of pages necessary to contain it.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// use vmap::Size;

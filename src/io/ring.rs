@@ -17,7 +17,7 @@ use std::io::{self, BufRead, Read, Write};
 /// furthur writes may be performed until a read occurs. The writable length
 /// sequence is the capacity of the buffer, less any pending readable bytes.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -143,7 +143,7 @@ impl Write for Ring {
 /// bytes from the read side of the queue. The writeable size is always equal
 /// to the overall capacity of the buffer.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;

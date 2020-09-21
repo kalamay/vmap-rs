@@ -13,7 +13,7 @@ use crate::{
 
 /// Allocation of one or more read-only sequential pages.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
 /// # extern crate vmap;
@@ -78,7 +78,7 @@ impl Map {
     /// convert the `Map` into a `MapMut`, use `Map::file` with a file handle
     /// open for writing. If not done, the convertion to `MapMut` will fail.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// # extern crate vmap;
     /// use std::fs::OpenOptions;
@@ -106,7 +106,7 @@ impl Map {
 
     /// Create a new map object from a range of a file.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -134,7 +134,7 @@ impl Map {
     /// is less than the requested range, the returned mapping will be
     /// shortened to match the file.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -172,7 +172,7 @@ impl Map {
     /// 2. When a valid sub-range is known and not exceeded.
     /// 3. When the range will become valid and is not used until then.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -206,7 +206,7 @@ impl Map {
     /// Generally don't use this unless you are entirely sure you are
     /// doing so correctly.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -233,7 +233,7 @@ impl Map {
     /// This will change the protection of the mapping. If the original file
     /// was not opened with write permissions, this will error.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -379,7 +379,7 @@ pub struct MapMut {
 impl MapMut {
     /// Create a new anonymous mapping at least as large as the hint.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -407,7 +407,7 @@ impl MapMut {
 
     /// Creates a new read/write map object using the full range of a file.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// # extern crate vmap;
     /// use std::fs::OpenOptions;
@@ -467,7 +467,7 @@ impl MapMut {
     /// Initially, the mapping will be shared with other processes, but writes
     /// will be kept private.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -536,7 +536,7 @@ impl MapMut {
     /// Generally don't use this unless you are entirely sure you are
     /// doing so correctly.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
@@ -569,7 +569,7 @@ impl MapMut {
     /// This will change the protection of the mapping. If the original file
     /// was not opened with write permissions, this will error.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
     /// # extern crate vmap;
