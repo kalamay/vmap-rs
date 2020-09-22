@@ -18,6 +18,7 @@
 //! use std::io::Write;
 //! use std::fs::OpenOptions;
 //! use std::path::PathBuf;
+//! use std::str::from_utf8;
 //! # use std::fs;
 //!
 //! # fn main() -> vmap::Result<()> {
@@ -30,7 +31,7 @@
 //!
 //! // Map the beginning of the file
 //! let map = Map::file(&file, 0, 14)?;
-//! assert_eq!(b"this is a test", &map[..]);
+//! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
 //! // ... we could have started with MapMut::file(...)
@@ -42,7 +43,7 @@
 //!
 //! // Move the MapMut back into a Map
 //! let map = map.into_map()?;
-//! assert_eq!(b"that is a test", &map[..]);
+//! assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
 //! # Ok(())
 //! # }
 //! ```

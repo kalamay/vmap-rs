@@ -19,13 +19,14 @@ use crate::{
 /// # extern crate vmap;
 /// use vmap::{Map, AdviseAccess, AdviseUsage};
 /// use std::fs::OpenOptions;
+/// use std::str::from_utf8;
 ///
 /// # fn main() -> vmap::Result<()> {
 /// let file = OpenOptions::new().read(true).open("README.md")?;
 /// let page = Map::file(&file, 113, 30)?;
 /// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
-/// assert_eq!(b"fast and safe memory-mapped IO", &page[..]);
-/// assert_eq!(b"safe", &page[9..13]);
+/// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&page[..]));
+/// assert_eq!(Ok("safe"), from_utf8(&page[9..13]));
 /// # Ok(())
 /// # }
 /// ```
@@ -81,13 +82,14 @@ impl Map {
     /// # Examples
     /// ```
     /// # extern crate vmap;
-    /// use std::fs::OpenOptions;
     /// use vmap::Map;
+    /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let map = Map::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
     ///
     /// // The file handle is read-only.
     /// assert!(map.into_map_mut().is_err());
@@ -110,14 +112,15 @@ impl Map {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use std::fs::OpenOptions;
     /// use vmap::Map;
+    /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
     /// let map = Map::file(&file, 0, 143)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
     ///
     /// let map = Map::file(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(map.is_err());
@@ -138,14 +141,15 @@ impl Map {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use std::fs::OpenOptions;
     /// use vmap::Map;
+    /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
     /// let map = Map::file_max(&file, 0, 5000)?.expect("should be valid range");
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
     ///
     /// let map = Map::file_max(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(!map.is_err());
@@ -176,8 +180,9 @@ impl Map {
     ///
     /// ```
     /// # extern crate vmap;
-    /// use std::fs::OpenOptions;
     /// use vmap::Map;
+    /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("README.md")?;
@@ -185,7 +190,7 @@ impl Map {
     ///     Map::file_unchecked(&file, 0, file.metadata()?.len() as usize + 1)?
     /// };
     /// // It is safe read the valid range of the file.
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
     /// # Ok(())
     /// # }
     /// ```
@@ -212,6 +217,7 @@ impl Map {
     /// # extern crate vmap;
     /// use vmap::{Map, Protect};
     /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
@@ -220,7 +226,7 @@ impl Map {
     ///     let ptr = vmap::os::map_file(&file, 0, len, Protect::ReadOnly)?;
     ///     Map::from_ptr(ptr, len)
     /// };
-    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&page[33..63]));
     /// # Ok(())
     /// # }
     /// ```
@@ -242,6 +248,7 @@ impl Map {
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
     /// # use std::fs;
     ///
     /// # fn main() -> vmap::Result<()> {
@@ -253,14 +260,14 @@ impl Map {
     ///
     /// // Map the beginning of the file
     /// let map = Map::file(&file, 0, 14)?;
-    /// assert_eq!(b"this is a test", &map[..]);
+    /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     ///
     /// let mut map = map.into_map_mut()?;
     /// {
     ///     let mut data = &mut map[..];
     ///     data.write_all(b"that")?;
     /// }
-    /// assert_eq!(b"that is a test", &map[..]);
+    /// assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
     /// ```
@@ -385,6 +392,7 @@ impl MapMut {
     /// # extern crate vmap;
     /// use vmap::{MapMut, Protect};
     /// use std::io::Write;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let mut map = MapMut::new(200, Protect::ReadCopy)?;
@@ -393,7 +401,7 @@ impl MapMut {
     ///     assert!(data.len() >= 200);
     ///     data.write_all(b"test")?;
     /// }
-    /// assert_eq!(b"test", &map[..4]);
+    /// assert_eq!(Ok("test"), from_utf8(&map[..4]));
     /// # Ok(())
     /// # }
     /// ```
@@ -408,13 +416,14 @@ impl MapMut {
     /// # Examples
     /// ```
     /// # extern crate vmap;
-    /// use std::fs::OpenOptions;
     /// use vmap::MapMut;
+    /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let map = MapMut::open("README.md")?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[113..143]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
     /// # Ok(())
     /// # }
     /// ```
@@ -472,17 +481,18 @@ impl MapMut {
     /// use vmap::MapMut;
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
     /// let mut map = MapMut::copy(&file, 33, 30)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(b"fast and safe memory-mapped IO", &map[..]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
     /// {
     ///     let mut data = &mut map[..];
     ///     data.write_all(b"slow")?;
     /// }
-    /// assert_eq!(b"slow and safe memory-mapped IO", &map[..]);
+    /// assert_eq!(Ok("slow and safe memory-mapped IO"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
     /// ```
@@ -542,6 +552,7 @@ impl MapMut {
     /// use vmap::{MapMut, Protect};
     /// use std::fs::{self, OpenOptions};
     /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -554,7 +565,7 @@ impl MapMut {
     ///     let ptr = vmap::os::map_file(&file, 0, len, Protect::ReadOnly)?;
     ///     MapMut::from_ptr(ptr, len)
     /// };
-    /// assert_eq!(b"fast and safe memory-mapped IO", &page[33..63]);
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&page[33..63]));
     /// # Ok(())
     /// # }
     /// ```
@@ -576,6 +587,7 @@ impl MapMut {
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
     /// # use std::fs;
     ///
     /// # fn main() -> vmap::Result<()> {
@@ -586,14 +598,14 @@ impl MapMut {
     /// let file = OpenOptions::new().read(true).write(true).open(&path)?;
     ///
     /// let mut map = MapMut::file(&file, 0, 14)?;
-    /// assert_eq!(b"this is a test", &map[..]);
+    /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     /// {
     ///     let mut data = &mut map[..];
     ///     data.write_all(b"that")?;
     /// }
     ///
     /// let map = map.into_map()?;
-    /// assert_eq!(b"that is a test", &map[..]);
+    /// assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
     /// ```
