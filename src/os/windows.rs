@@ -89,11 +89,12 @@ impl Drop for MapHandle {
 
 /// Requests the page size and allocation granularity from the system.
 pub fn system_info() -> (u32, u32) {
-    unsafe {
-        let mut info: SYSTEM_INFO = mem::uninitialized();
-        GetSystemInfo(&mut info as LPSYSTEM_INFO);
-        (info.dwPageSize, info.dwAllocationGranularity)
-    }
+    let info = unsafe {
+        let mut info = mem::MaybeUninit::<SYSTEM_INFO>::uninit();
+        GetSystemInfo(info.as_mut_ptr() as LPSYSTEM_INFO);
+        info.assume_init()
+    };
+    (info.dwPageSize, info.dwAllocationGranularity)
 }
 
 /// Memory maps a given range of a file.
@@ -133,7 +134,7 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
 unsafe fn reserve(len: usize) -> Result<*mut c_void> {
     let pg = VirtualAlloc(ptr::null_mut(), len as SIZE_T, MEM_RESERVE, PAGE_NOACCESS);
     if pg.is_null() {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(RingAllocate))
     } else {
         VirtualFree(pg, 0, MEM_RELEASE);
         Ok(pg)
@@ -164,7 +165,7 @@ unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Resul
 /// continues to up through the offset of `2*len - 1`.
 pub fn map_ring(len: usize) -> Result<*mut u8> {
     let full = 2 * len;
-    let map = unsafe { MapHandle::new(INVALID_HANDLE_VALUE, PAGE_READWRITE, full, RingAllocate)? };
+    let map = unsafe { MapHandle::new(RingAllocate, INVALID_HANDLE_VALUE, PAGE_READWRITE, full)? };
 
     let mut n = 0;
     loop {
