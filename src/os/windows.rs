@@ -102,15 +102,12 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
-        Protect::ReadCopy => (
-            PAGE_READWRITE | PAGE_WRITECOPY,
-            FILE_MAP_READ | FILE_MAP_COPY,
-        ),
+        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_READ | FILE_MAP_COPY),
     };
 
     unsafe {
-        let map = MapHandle::new(MapFile, file.as_raw_handle(), prot, 0)?;
-        map.view(MapFile, access, off, len, ptr::null_mut())
+        let map = MapHandle::new(MapFileHandle, file.as_raw_handle(), prot, 0)?;
+        map.view(MapFileView, access, off, len, ptr::null_mut())
     }
 }
 
@@ -119,15 +116,12 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
-        Protect::ReadCopy => (
-            PAGE_READWRITE | PAGE_WRITECOPY,
-            FILE_MAP_READ | FILE_MAP_COPY,
-        ),
+        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_READ | FILE_MAP_COPY),
     };
 
     unsafe {
-        let map = MapHandle::new(MapAnonymous, INVALID_HANDLE_VALUE, prot, 0)?;
-        map.view(MapAnonymous, access, 0, len, ptr::null_mut())
+        let map = MapHandle::new(MapAnonymousHandle, INVALID_HANDLE_VALUE, prot, 0)?;
+        map.view(MapAnonymousView, access, 0, len, ptr::null_mut())
     }
 }
 

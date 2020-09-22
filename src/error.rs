@@ -274,8 +274,16 @@ impl fmt::Display for Error {
 pub enum Operation {
     /// The operation failed while attempting to map a file.
     MapFile,
+    /// A map file handle failed to open.
+    MapFileHandle,
+    /// The view for a map file handle could not be created.
+    MapFileView,
     /// The operation failed while attempting to allocate an anonymous mapping.
     MapAnonymous,
+    /// An anonymous mapping handle failed to open.
+    MapAnonymousHandle,
+    /// The view for an anonymouse mapping handle could not be created.
+    MapAnonymousView,
     /// A pointer could not be unmapped.
     Unmap,
     /// The [`Protect`] could not be applied to the provided memory region.
@@ -332,7 +340,11 @@ impl Operation {
     pub fn as_str(&self) -> Option<&'static str> {
         match *self {
             Operation::MapFile => Some("map file"),
+            Operation::MapFileHandle => Some("map file handle"),
+            Operation::MapFileView => Some("map file view"),
             Operation::MapAnonymous => Some("map anonymous"),
+            Operation::MapAnonymousHandle => Some("map anonymous handle"),
+            Operation::MapAnonymousView => Some("map anonymous view"),
             Operation::Unmap => Some("unmap"),
             Operation::Protect => Some("protect mapped memory"),
             Operation::Advise => Some("advise mapped memory"),
