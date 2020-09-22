@@ -68,6 +68,7 @@ pub mod io;
 pub type Pgno = u32;
 
 /// Protection level for a page.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Protect {
     /// The page(s) may only be read from.
     ReadOnly,
@@ -78,6 +79,7 @@ pub enum Protect {
 }
 
 /// Desired behavior when flushing write changes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Flush {
     /// Request dirty pages to be written immediately and block until completed.
     ///
@@ -88,6 +90,7 @@ pub enum Flush {
 }
 
 /// Hint for the access pattern of the underlying mapping.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AdviseAccess {
     /// Use the system default behavior.
     Normal,
@@ -98,6 +101,7 @@ pub enum AdviseAccess {
 }
 
 /// Hint for the immediacy of accessing the underlying mapping.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AdviseUsage {
     /// Use the system default behavior.
     Normal,
