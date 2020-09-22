@@ -44,7 +44,7 @@ use std::io::{self, BufRead, Read, Write};
 #[derive(Debug)]
 pub struct Ring {
     ptr: *mut u8,
-    len: usize,
+    mask: u64,
     rpos: u64,
     wpos: u64,
 }
@@ -61,7 +61,7 @@ impl Ring {
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,
-            len,
+            mask: len as u64 - 1,
             rpos: 0,
             wpos: 0,
         })
@@ -70,7 +70,7 @@ impl Ring {
 
 impl Drop for Ring {
     fn drop(&mut self) {
-        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default();
+        unsafe { unmap_ring(self.ptr, self.write_capacity()) }.unwrap_or_default();
     }
 }
 
@@ -79,7 +79,7 @@ impl SeqRead for Ring {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        (self.rpos % self.len as u64) as usize
+        (self.rpos & self.mask) as usize
     }
     fn read_len(&self) -> usize {
         (self.wpos - self.rpos) as usize
@@ -91,13 +91,13 @@ impl SeqWrite for Ring {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos % self.len as u64) as usize
+        (self.wpos & self.mask) as usize
     }
     fn write_len(&self) -> usize {
-        self.len - self.read_len()
+        self.write_capacity() - self.read_len()
     }
     fn write_capacity(&self) -> usize {
-        self.len
+        self.mask as usize + 1
     }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
@@ -146,7 +146,7 @@ impl Write for Ring {
 /// ```
 /// # extern crate vmap;
 /// #
-/// use vmap::io::{InfiniteRing, SeqWrite};
+/// use vmap::io::{InfiniteRing, SeqRead, SeqWrite};
 /// use std::io::{BufRead, Read, Write};
 ///
 /// # fn main() -> std::io::Result<()> {
@@ -160,9 +160,13 @@ impl Write for Ring {
 ///     i += 1;
 /// }
 ///
+/// // skip over the overwritten tail
+/// buf.consume(20 - buf.read_offset());
+///
+/// // read the next line
 /// let mut line = String::new();
 /// let len = buf.read_line(&mut line)?;
-/// println!("total = {}", total);
+///
 /// assert_eq!(len, 20);
 /// assert_eq!(&line[line.len()-20..], "this is test line 2\n");
 /// # Ok(())
@@ -171,7 +175,7 @@ impl Write for Ring {
 #[derive(Debug)]
 pub struct InfiniteRing {
     ptr: *mut u8,
-    len: usize,
+    mask: u64,
     rlen: u64,
     wpos: u64,
 }
@@ -188,7 +192,7 @@ impl InfiniteRing {
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,
-            len,
+            mask: len as u64 - 1,
             rlen: 0,
             wpos: 0,
         })
@@ -197,7 +201,7 @@ impl InfiniteRing {
 
 impl Drop for InfiniteRing {
     fn drop(&mut self) {
-        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default()
+        unsafe { unmap_ring(self.ptr, self.write_capacity()) }.unwrap_or_default()
     }
 }
 
@@ -206,7 +210,7 @@ impl SeqRead for InfiniteRing {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        ((self.wpos - self.rlen) % self.len as u64) as usize
+        ((self.wpos - self.rlen) & self.mask) as usize
     }
     fn read_len(&self) -> usize {
         self.rlen as usize
@@ -218,17 +222,17 @@ impl SeqWrite for InfiniteRing {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos % self.len as u64) as usize
+        (self.wpos & self.mask) as usize
     }
     fn write_len(&self) -> usize {
-        self.len
+        self.write_capacity()
     }
     fn write_capacity(&self) -> usize {
-        self.len
+        self.mask as usize + 1
     }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
-        self.rlen = cmp::min(self.rlen + len as u64, self.len as u64);
+        self.rlen = cmp::min(self.rlen + len as u64, self.mask + 1);
     }
 }
 
