@@ -389,8 +389,6 @@ impl fmt::Display for Operation {
 pub enum Input {
     /// The range of the requested file or bytes is invalid.
     InvalidRange,
-    /// An unexpected `null` pointer was mapped.
-    NullPtr,
 }
 
 impl Input {
@@ -413,7 +411,6 @@ impl Input {
     pub fn as_str(&self) -> &'static str {
         match *self {
             Input::InvalidRange => "invalid range",
-            Input::NullPtr => "null pointer",
         }
     }
 }
