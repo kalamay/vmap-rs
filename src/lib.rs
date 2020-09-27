@@ -26,15 +26,13 @@
 //! let path: PathBuf = /* path to file */
 //! # tmp.path().join("example");
 //! # fs::write(&path, b"this is a test")?;
-//! // Open with write permissions so the Map can be converted into a MapMut
-//! let file = OpenOptions::new().read(true).write(true).open(&path)?;
 //!
-//! // Map the beginning of the file
-//! let map = Map::file(&file, 0, 14)?;
+//! // Open with write permissions so the Map can be converted into a MapMut
+//! let map = Map::with_options().write(true).len(14).open(&path)?;
 //! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
-//! // ... we could have started with MapMut::file(...)
+//! // ... we could have started with MapMut::with_options()
 //! let mut map = map.into_map_mut()?;
 //! {
 //!     let mut data = &mut map[..];
@@ -61,7 +59,7 @@ mod span;
 pub use self::span::{Span, SpanMut};
 
 mod map;
-pub use self::map::{Map, MapMut};
+pub use self::map::{Map, MapMut, Options};
 
 pub mod io;
 
