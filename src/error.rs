@@ -1,6 +1,5 @@
 //! Types for working with various map operation errors.
 
-use std::os::raw::c_int;
 use std::{fmt, io};
 
 /// A specialized `Result` type for map operations.
@@ -28,18 +27,7 @@ impl<F> From<(Error, F)> for Error {
     }
 }
 
-/// A type for storing platform-specific kernel error codes.
-///
-/// This is *not* used libc or Windows errors (i.e. `errno` or
-/// `GetLastError`). The `std::io::Error` holds the platform errors.
-/// However, on macOS and iOS, some platform invocations use a different
-/// error mechanism (i.e. `kern_return_t`). Currently, on other platforms
-/// this isn't actually used by this library. However, to maintain cross-
-/// platform use of the error, it is implemented across all platforms.
-pub type KernelResult = c_int;
-
 /// A list specifying general categories of map errors.
-#[non_exhaustive]
 pub struct Error {
     repr: Repr,
     op: Operation,
@@ -48,7 +36,7 @@ pub struct Error {
 enum Repr {
     Io(io::Error),
     Input(Input),
-    Kernel(kernel::Error),
+    System(system_error::Error),
 }
 
 impl Error {
@@ -96,7 +84,30 @@ impl Error {
         }
     }
 
-    /// Returns an error that wraps a [`KernelResult`] along with an [`Operation`].
+    /// Returns an error that wraps a `system_error::Error` along with an [`Operation`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::ErrorKind;
+    /// use vmap::{Error, Operation};
+    ///
+    /// println!("System error: {:?}", Error::system(
+    ///     Operation::MapFile,
+    ///     system_error::Error::last_os_error()
+    /// ));
+    /// ```
+    ///
+    /// [`system_error::Error`]: https://docs.rs/system_error/0.1.1/system_error/struct.Error.html
+    /// [`Operation`]: enum.Operation.html
+    pub fn system(op: Operation, err: system_error::Error) -> Self {
+        Self {
+            repr: Repr::System(err),
+            op,
+        }
+    }
+
+    /// Returns an error that wraps a [`system_error::KernelCode`] along with an [`Operation`].
     ///
     /// # Examples
     ///
@@ -109,13 +120,10 @@ impl Error {
     /// ));
     /// ```
     ///
-    /// [`KernelResult`]: type.KernelResult.html
+    /// [`system_error::KernelCode`]: https://docs.rs/system_error/0.1.1/system_error/type.KernelCode.html
     /// [`Operation`]: enum.Operation.html
-    pub fn kernel(op: Operation, code: KernelResult) -> Self {
-        Self {
-            repr: Repr::Kernel(kernel::Error(code)),
-            op,
-        }
+    pub fn kernel(op: Operation, code: system_error::KernelCode) -> Self {
+        Self::system(op, system_error::Error::from_raw_kernel_error(code))
     }
 
     /// Returns an error representing the last OS error which occurred.
@@ -132,7 +140,7 @@ impl Error {
     /// println!("last OS error: {:?}", Error::last_os_error(Operation::MapFile));
     /// ```
     pub fn last_os_error(op: Operation) -> Self {
-        Self::io(op, io::Error::last_os_error())
+        Self::system(op, system_error::Error::last_os_error())
     }
 
     /// Returns the OS error that this error represents (if any).
@@ -159,10 +167,10 @@ impl Error {
     /// print_os_error(&Error::input(Operation::MapFile, Input::InvalidRange));
     /// ```
     pub fn raw_os_error(&self) -> Option<i32> {
-        if let Repr::Io(e) = &self.repr {
-            e.raw_os_error()
-        } else {
-            None
+        match &self.repr {
+            Repr::Io(err) => err.raw_os_error(),
+            Repr::Input(_) => None,
+            Repr::System(err) => err.raw_os_error(),
         }
     }
 
@@ -186,8 +194,8 @@ impl Error {
     pub fn kind(&self) -> io::ErrorKind {
         match self.repr {
             Repr::Io(ref err) => err.kind(),
-            Repr::Kernel(ref err) => err.kind(),
             Repr::Input(_) => io::ErrorKind::InvalidInput,
+            Repr::System(ref err) => err.kind(),
         }
     }
 
@@ -217,7 +225,7 @@ impl std::error::Error for Error {
         match self.repr {
             Repr::Io(ref err) => Some(err),
             Repr::Input(_) => None,
-            Repr::Kernel(_) => None,
+            Repr::System(_) => None,
         }
     }
 }
@@ -236,7 +244,7 @@ impl fmt::Debug for Error {
         let (field, value) = match self.repr {
             Repr::Io(ref err) => ("io", err as &dyn fmt::Debug),
             Repr::Input(ref input) => ("input", input as &dyn fmt::Debug),
-            Repr::Kernel(ref err) => ("kernel", err as &dyn fmt::Debug),
+            Repr::System(ref err) => ("system", err as &dyn fmt::Debug),
         };
         fmt.debug_struct("Error")
             .field("op", &self.op)
@@ -251,7 +259,7 @@ impl fmt::Display for Error {
         let value = match self.repr {
             Repr::Io(ref err) => err as &dyn fmt::Display,
             Repr::Input(ref input) => input as &dyn fmt::Display,
-            Repr::Kernel(ref err) => err as &dyn fmt::Display,
+            Repr::System(ref err) => err as &dyn fmt::Display,
         };
         if let Some(op) = self.op.as_str() {
             write!(fmt, "failed to {}, {}", op, value)
@@ -414,134 +422,4 @@ impl fmt::Display for Input {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.write_str(self.as_str())
     }
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-mod kernel {
-    use super::{fmt, io, KernelResult};
-
-    pub struct Error(pub KernelResult);
-
-    impl fmt::Debug for Error {
-        fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(fmt, "\"{}\"", self)
-        }
-    }
-
-    impl fmt::Display for Error {
-        fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(fmt, "unexpected kernel error {}", self.0)
-        }
-    }
-
-    impl Error {
-        pub fn kind(&self) -> io::ErrorKind {
-            io::ErrorKind::Other
-        }
-    }
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod kernel {
-    use super::{fmt, io, KernelResult};
-    use std::ffi::CStr;
-    use std::os::raw::c_char;
-
-    extern "C" {
-        fn mach_error_string(code: KernelResult) -> *const c_char;
-    }
-
-    pub struct Error(pub KernelResult);
-
-    impl fmt::Debug for Error {
-        fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(fmt, "\"{}\"", self)
-        }
-    }
-
-    impl fmt::Display for Error {
-        fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let msg = unsafe { CStr::from_ptr(mach_error_string(self.0)) };
-            match msg.to_str() {
-                Err(err) => write!(fmt, "invalid kernel error {} ({})", self.0, err),
-                Ok(val) => write!(fmt, "{} (kernel error {})", val, self.0),
-            }
-        }
-    }
-
-    impl Error {
-        pub fn kind(&self) -> io::ErrorKind {
-            match self.0 {
-                KERN_INVALID_ADDRESS
-                | KERN_INVALID_ARGUMENT
-                | KERN_INVALID_CAPABILITY
-                | KERN_INVALID_HOST
-                | KERN_INVALID_LEDGER
-                | KERN_INVALID_MEMORY_CONTROL
-                | KERN_INVALID_NAME
-                | KERN_INVALID_OBJECT
-                | KERN_INVALID_POLICY
-                | KERN_INVALID_PROCESSOR_SET
-                | KERN_INVALID_RIGHT
-                | KERN_INVALID_SECURITY
-                | KERN_INVALID_TASK
-                | KERN_INVALID_VALUE => io::ErrorKind::InvalidInput,
-                _ => io::ErrorKind::Other,
-            }
-        }
-    }
-
-    //pub const KERN_SUCCESS: KernelResult = 0;
-    pub const KERN_INVALID_ADDRESS: KernelResult = 1;
-    //pub const KERN_PROTECTION_FAILURE: KernelResult = 2;
-    //pub const KERN_NO_SPACE: KernelResult = 3;
-    pub const KERN_INVALID_ARGUMENT: KernelResult = 4;
-    //pub const KERN_FAILURE: KernelResult = 5;
-    //pub const KERN_RESOURCE_SHORTAGE: KernelResult = 6;
-    //pub const KERN_NOT_RECEIVER: KernelResult = 7;
-    //pub const KERN_NO_ACCESS: KernelResult = 8;
-    //pub const KERN_MEMORY_FAILURE: KernelResult = 9;
-    //pub const KERN_MEMORY_ERROR: KernelResult = 10;
-    //pub const KERN_ALREADY_IN_SET: KernelResult = 11;
-    //pub const KERN_NOT_IN_SET: KernelResult = 12;
-    //pub const KERN_NAME_EXISTS: KernelResult = 13;
-    //pub const KERN_ABORTED: KernelResult = 14;
-    pub const KERN_INVALID_NAME: KernelResult = 15;
-    pub const KERN_INVALID_TASK: KernelResult = 16;
-    pub const KERN_INVALID_RIGHT: KernelResult = 17;
-    pub const KERN_INVALID_VALUE: KernelResult = 18;
-    //pub const KERN_UREFS_OVERFLOW: KernelResult = 19;
-    pub const KERN_INVALID_CAPABILITY: KernelResult = 20;
-    //pub const KERN_RIGHT_EXISTS: KernelResult = 21;
-    pub const KERN_INVALID_HOST: KernelResult = 22;
-    //pub const KERN_MEMORY_PRESENT: KernelResult = 23;
-    //pub const KERN_MEMORY_DATA_MOVED: KernelResult = 24;
-    //pub const KERN_MEMORY_RESTART_COPY: KernelResult = 25;
-    pub const KERN_INVALID_PROCESSOR_SET: KernelResult = 26;
-    //pub const KERN_POLICY_LIMIT: KernelResult = 27;
-    pub const KERN_INVALID_POLICY: KernelResult = 28;
-    pub const KERN_INVALID_OBJECT: KernelResult = 29;
-    //pub const KERN_ALREADY_WAITING: KernelResult = 30;
-    //pub const KERN_DEFAULT_SET: KernelResult = 31;
-    //pub const KERN_EXCEPTION_PROTECTED: KernelResult = 32;
-    pub const KERN_INVALID_LEDGER: KernelResult = 33;
-    pub const KERN_INVALID_MEMORY_CONTROL: KernelResult = 34;
-    pub const KERN_INVALID_SECURITY: KernelResult = 35;
-    //pub const KERN_NOT_DEPRESSED: KernelResult = 36;
-    //pub const KERN_TERMINATED: KernelResult = 37;
-    //pub const KERN_LOCK_SET_DESTROYED: KernelResult = 38;
-    //pub const KERN_LOCK_UNSTABLE: KernelResult = 39;
-    //pub const KERN_LOCK_OWNED: KernelResult = 40;
-    //pub const KERN_LOCK_OWNED_SELF: KernelResult = 41;
-    //pub const KERN_SEMAPHORE_DESTROYED: KernelResult = 42;
-    //pub const KERN_RPC_SERVER_TERMINATED: KernelResult = 43;
-    //pub const KERN_RPC_TERMINATE_ORPHAN: KernelResult = 44;
-    //pub const KERN_RPC_CONTINUE_ORPHAN: KernelResult = 45;
-    //pub const KERN_NOT_SUPPORTED: KernelResult = 46;
-    //pub const KERN_NODE_DOWN: KernelResult = 47;
-    //pub const KERN_NOT_WAITING: KernelResult = 48;
-    //pub const KERN_OPERATION_TIMED_OUT: KernelResult = 49;
-    //pub const KERN_CODESIGN_ERROR: KernelResult = 50;
-    //pub const KERN_POLICY_STATIC: KernelResult = 51;
-    //pub const KERN_RETURN_MAX: KernelResult = 0x100;
 }

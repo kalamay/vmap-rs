@@ -55,7 +55,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub mod os;
 
 mod error;
-pub use self::error::{ConvertResult, Error, Input, KernelResult, Operation, Result};
+pub use self::error::{ConvertResult, Error, Input, Operation, Result};
 
 mod span;
 pub use self::span::{Span, SpanMut};
