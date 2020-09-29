@@ -62,6 +62,7 @@ impl Map {
     ///
     /// # Examples
     /// ```
+    /// #[allow(deprecated)]
     /// # extern crate vmap;
     /// use vmap::Map;
     /// use std::fs::OpenOptions;
@@ -87,6 +88,7 @@ impl Map {
     /// # Examples
     ///
     /// ```
+    /// #[allow(deprecated)]
     /// # extern crate vmap;
     /// use vmap::Map;
     /// use std::fs::OpenOptions;
@@ -119,6 +121,7 @@ impl Map {
     /// # Examples
     ///
     /// ```
+    /// #[allow(deprecated)]
     /// # extern crate vmap;
     /// use vmap::Map;
     /// use std::fs::OpenOptions;
@@ -373,6 +376,7 @@ impl MapMut {
     ///
     /// # Examples
     /// ```
+    /// #[allow(deprecated)]
     /// # extern crate vmap;
     /// use vmap::MapMut;
     /// use std::fs::OpenOptions;
