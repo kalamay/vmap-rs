@@ -140,13 +140,13 @@ impl Map {
     /// ```
     #[deprecated(
         since = "0.4.0",
-        note = "use Map::with_options().offset(off).len_max(len).try_map(f) instead"
+        note = "use Map::with_options().offset(off).len_max(len).map_if(f) instead"
     )]
     pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .offset(offset)
             .len_max(max_length)
-            .try_map(f)
+            .map_if(f)
     }
 
     /// Create a new map object from a range of a file without bounds checking.
@@ -408,13 +408,13 @@ impl MapMut {
     /// shortened to match the file.
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().offset(off).len_max(len).try_map(f) instead"
+        note = "use MapMut::with_options().offset(off).len_max(len).map_if(f) instead"
     )]
     pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .offset(offset)
             .len_max(max_length)
-            .try_map(f)
+            .map_if(f)
     }
 
     /// Create a new mutable map object from a range of a file without bounds
@@ -480,14 +480,14 @@ impl MapMut {
     /// will be kept private.
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().copy(true).offset(off).len_max(len).try_map(f) instead"
+        note = "use MapMut::with_options().copy(true).offset(off).len_max(len).map_if(f) instead"
     )]
     pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .copy(true)
             .offset(offset)
             .len_max(max_length)
-            .try_map(f)
+            .map_if(f)
     }
 
     /// Create a new private map object from a range of a file without bounds checking.
@@ -839,8 +839,8 @@ where
     }
 
     /// TODO
-    pub fn resize_at_least(&mut self, resize_at_least: usize) -> &mut Self {
-        self.resize = Resize::AtLeast(resize_at_least);
+    pub fn resize_min(&mut self, resize_min: usize) -> &mut Self {
+        self.resize = Resize::AtLeast(resize_min);
         self
     }
 
