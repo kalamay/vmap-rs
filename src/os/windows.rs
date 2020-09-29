@@ -106,7 +106,7 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
     };
 
     unsafe {
-        let map = MapHandle::new(MapFileHandle, file.as_raw_handle(), prot, 0)?;
+        let map = MapHandle::new(MapFileHandle, file.as_raw_handle(), prot, off + len)?;
         map.view(MapFileView, access, off, len, ptr::null_mut())
     }
 }
@@ -120,7 +120,7 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
     };
 
     unsafe {
-        let map = MapHandle::new(MapAnonymousHandle, INVALID_HANDLE_VALUE, prot, 0)?;
+        let map = MapHandle::new(MapAnonymousHandle, INVALID_HANDLE_VALUE, prot, len)?;
         map.view(MapAnonymousView, access, 0, len, ptr::null_mut())
     }
 }
