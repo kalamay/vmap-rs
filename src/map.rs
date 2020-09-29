@@ -736,6 +736,7 @@ pub struct Options<T> {
     offset: usize,
     write: bool,
     copy: bool,
+    truncate: bool,
     phantom: PhantomData<T>,
 }
 
@@ -754,6 +755,7 @@ where
             offset: 0,
             write,
             copy: false,
+            truncate: false,
             phantom: PhantomData,
         }
     }
@@ -770,6 +772,7 @@ where
             offset: 0,
             write,
             copy: false,
+            truncate: false,
             phantom: PhantomData,
         }
     }
@@ -795,22 +798,19 @@ where
     /// TODO
     pub fn create(&mut self, create: bool) -> &mut Self {
         self.open_options.create(create);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut self.open_options, 0600);
         self
     }
 
     /// TODO
     pub fn create_new(&mut self, create_new: bool) -> &mut Self {
         self.open_options.create_new(create_new);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut self.open_options, 0600);
         self
     }
 
     /// TODO
     pub fn truncate(&mut self, truncate: bool) -> &mut Self {
         self.open_options.truncate(truncate);
+        self.truncate = truncate;
         self
     }
 
@@ -850,21 +850,25 @@ where
     }
 
     /// TODO
-    pub fn try_open<P: AsRef<Path>>(&self, path: P) -> Result<Option<T>> {
-        self.try_map(&self.open_options.open(path).map_err(map_file_err)?)
+    pub fn open_if<P: AsRef<Path>>(&self, path: P) -> Result<Option<T>> {
+        self.map_if(&self.open_options.open(path).map_err(map_file_err)?)
     }
 
     /// TODO
     pub fn map(&self, f: &File) -> Result<T> {
-        self.try_map(f)?
+        self.map_if(f)?
             .ok_or_else(|| Error::input(Operation::MapFile, Input::InvalidRange))
     }
 
     /// TODO
-    pub fn try_map(&self, f: &File) -> Result<Option<T>> {
+    pub fn map_if(&self, f: &File) -> Result<Option<T>> {
         let md = f.metadata().map_err(map_file_err)?;
 
         let resize = |sz: usize| f.set_len(sz as u64).map(|_| sz).map_err(map_file_err);
+
+        if self.truncate && md.len() > 0 {
+            resize(0)?;
+        }
 
         let flen = match self.resize {
             Resize::Exact(sz) => resize(sz)?,
