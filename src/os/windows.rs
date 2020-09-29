@@ -106,7 +106,7 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
     };
 
     unsafe {
-        let map = MapHandle::new(MapFileHandle, file.as_raw_handle(), prot, off + len)?;
+        let map = MapHandle::new(MapFileHandle, file.as_raw_handle(), prot, 0)?;
         map.view(MapFileView, access, off, len, ptr::null_mut())
     }
 }

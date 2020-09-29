@@ -40,14 +40,6 @@ use private::FromPtr;
 /// ```
 pub struct Map(MapMut);
 
-unsafe fn file_unchecked(f: &File, off: usize, len: usize, prot: Protect) -> Result<*mut u8> {
-    let sz = Size::allocation();
-    let roff = sz.truncate(off);
-    let rlen = sz.round(len + (off - roff));
-    let ptr = map_file(f, roff, rlen, prot)?;
-    Ok(ptr.add(off - roff))
-}
-
 impl Map {
     /// TODO
     pub fn with_options() -> Options<Self> {
@@ -147,39 +139,6 @@ impl Map {
             .offset(offset)
             .len_max(max_length)
             .map_if(f)
-    }
-
-    /// Create a new map object from a range of a file without bounds checking.
-    ///
-    /// # Safety
-    ///
-    /// This does not verify that the requsted range is valid for the file.
-    /// This can be useful in a few scenarios:
-    /// 1. When the range is already known to be valid.
-    /// 2. When a valid sub-range is known and not exceeded.
-    /// 3. When the range will become valid and is not used until then.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # extern crate vmap;
-    /// use vmap::Map;
-    /// use std::fs::OpenOptions;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// let file = OpenOptions::new().read(true).write(true).open("README.md")?;
-    /// let map = unsafe {
-    ///     Map::file_unchecked(&file, 0, file.metadata()?.len() as usize + 1)?
-    /// };
-    /// // It is safe read the valid range of the file.
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub unsafe fn file_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
-        let ptr = file_unchecked(f, offset, length, Protect::ReadWrite)?;
-        Ok(Self::from_ptr(ptr, length))
     }
 
     /// Transfer ownership of the map into a mutable map.
@@ -417,21 +376,6 @@ impl MapMut {
             .map_if(f)
     }
 
-    /// Create a new mutable map object from a range of a file without bounds
-    /// checking.
-    ///
-    /// # Safety
-    ///
-    /// This does not verify that the requsted range is valid for the file.
-    /// This can be useful in a few scenarios:
-    /// 1. When the range is already known to be valid.
-    /// 2. When a valid sub-range is known and not exceeded.
-    /// 3. When the range will become valid and is not used until then.
-    pub unsafe fn file_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
-        let ptr = file_unchecked(f, offset, length, Protect::ReadWrite)?;
-        Ok(Self::from_ptr(ptr, length))
-    }
-
     /// Create a new private map object from a range of a file.
     ///
     /// Initially, the mapping will be shared with other processes, but writes
@@ -488,23 +432,6 @@ impl MapMut {
             .offset(offset)
             .len_max(max_length)
             .map_if(f)
-    }
-
-    /// Create a new private map object from a range of a file without bounds checking.
-    ///
-    /// Initially, the mapping will be shared with other processes, but writes
-    /// will be kept private.
-    ///
-    /// # Safety
-    ///
-    /// This does not verify that the requsted range is valid for the file.
-    /// This can be useful in a few scenarios:
-    /// 1. When the range is already known to be valid.
-    /// 2. When a valid sub-range is known and not exceeded.
-    /// 3. When the range will become valid before any write occurs.
-    pub unsafe fn copy_unchecked(f: &File, offset: usize, length: usize) -> Result<Self> {
-        let ptr = file_unchecked(f, offset, length, Protect::ReadCopy)?;
-        Ok(Self::from_ptr(ptr, length))
     }
 
     /// Transfer ownership of the map into a mutable map.
@@ -862,6 +789,7 @@ where
 
     /// TODO
     pub fn map_if(&self, f: &File) -> Result<Option<T>> {
+        let off = self.offset;
         let md = f.metadata().map_err(map_file_err)?;
 
         let resize = |sz: usize| f.set_len(sz as u64).map(|_| sz).map_err(map_file_err);
@@ -876,11 +804,11 @@ where
             _ => md.len() as usize,
         };
 
-        if flen < self.offset {
+        if flen < off {
             return Ok(None);
         }
 
-        let max = flen - self.offset;
+        let max = flen - off;
         let len = match self.len {
             Len::End => max,
             Len::Max(l) => cmp::min(l, max),
@@ -892,10 +820,11 @@ where
             }
         };
 
-        unsafe {
-            let ptr = file_unchecked(f, self.offset, len, self.protect())?;
-            Ok(Some(T::from_ptr(ptr, len)))
-        }
+        let sz = Size::allocation();
+        let roff = sz.truncate(off);
+        let rlen = len + (off - roff);
+        let ptr = map_file(f, roff, rlen, self.protect())?;
+        unsafe { Ok(Some(T::from_ptr(ptr.add(off - roff), len))) }
     }
 
     fn protect(&self) -> Protect {
