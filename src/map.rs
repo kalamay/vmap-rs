@@ -324,10 +324,6 @@ impl MapMut {
     /// # Ok(())
     /// # }
     /// ```
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().len_min(hint).alloc() instead"
-    )]
     pub fn new(hint: usize) -> Result<Self> {
         Self::with_options().len_min(hint).alloc()
     }
@@ -889,10 +885,16 @@ impl<T: FromPtr> Options<T> {
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
     ///
-    /// let mut map = MapMut::with_options().create(true).resize(4).open(&path)?;
-    /// assert_eq!(b"\0\0\0\0", &map[..]);
-    /// map.as_mut().write_all(b"test")?;
-    /// assert_eq!(b"test", &map[..]);
+    /// {
+    ///     let mut map = MapMut::with_options()
+    ///         .create(true)
+    ///         .truncate(true)
+    ///         .resize(4)
+    ///         .open(&path)?;
+    ///     assert_eq!(b"\0\0\0\0", &map[..]);
+    ///     map.as_mut().write_all(b"test")?;
+    ///     assert_eq!(b"test", &map[..]);
+    /// }
     ///
     /// let mut map = MapMut::with_options().truncate(true).resize(4).open(&path)?;
     /// assert_eq!(b"\0\0\0\0", &map[..]);
@@ -1014,7 +1016,7 @@ impl<T: FromPtr> Options<T> {
     /// assert!(Map::with_options().len_min(100).open_if(&path)?.is_none());
     ///
     /// let mut anon = MapMut::with_options().len_min(2000).alloc()?;
-    /// assert!(anon.len() == Size::allocation().size(1));
+    /// assert_eq!(Size::allocation().size(1), anon.len());
     /// # Ok(())
     /// # }
     /// ```
@@ -1027,41 +1029,266 @@ impl<T: FromPtr> Options<T> {
         self
     }
 
-    /// TODO
+    /// Sets the maximum byte length of the mapping.
+    ///
+    /// For file-based mappings, unlike [`.len()`] or [`.len_min()`]. this
+    /// length need not be available in the underlying resource. If the length
+    /// requested exceeds the size of the file, the mapped region will be
+    /// decreased to match the end of the file. The [`.offset()`] is still
+    /// required to be within the resource's size bounds however.
+    ///
+    /// For anonymous mappings, this is equivalent to using [`.len()`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::{Map, MapMut};
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    /// use std::fs;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// let map = Map::with_options().offset(5).len_max(100).open(&path)?;
+    /// assert_eq!(9, map.len());
+    /// assert_eq!(Ok("is a test"), from_utf8(&map[..]));
+    ///
+    /// let mut anon = MapMut::with_options().len_max(2000).alloc()?;
+    /// assert_eq!(2000, anon.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.offset()`]: #method.offset
+    /// [`.len()`]: #method.len
+    /// [`.len_min()`]: #method.len_min
     pub fn len_max(&mut self, len_max: usize) -> &mut Self {
         self.len = Len::Max(len_max);
         self
     }
 
-    /// TODO
+    /// Sets the option to resize the file to an exact length.
+    ///
+    /// When mapping to a file using [`.open()`], [`.open_if()`], [`.map()`],
+    /// or [`.map_if()`] this options sets the length of the underlying
+    /// resource to an explicit size by calling [`.set_len()`] on the [`File`].
+    ///
+    /// In order for the file to be resized, [`.write()`] access must be used.
+    ///
+    /// This has no affect on anonymous mappings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    /// use std::fs;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// let map = Map::with_options().write().resize(7).open(&path)?;
+    /// assert_eq!(7, map.len());
+    /// assert_eq!(Ok("this is"), from_utf8(&map[..]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.open()`]: #method.open
+    /// [`.open_if()`]: #method.open_if
+    /// [`.map()`]: #method.map
+    /// [`.map_if()`]: #method.map_if
+    /// [`.set_len()`]: https://doc.rust-lang.org/std/fs/struct.File.html#method.set_len
+    /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
+    /// [`.write()`]: #method.write
     pub fn resize(&mut self, resize: usize) -> &mut Self {
         self.resize = Resize::Exact(resize);
         self
     }
 
-    /// TODO
+    /// Sets the option to resize the file to a minimum length.
+    ///
+    /// When mapping to a file using [`.open()`], [`.open_if()`], [`.map()`],
+    /// or [`.map_if()`] this options increases the length of the underlying
+    /// resource to the provided size by calling [`.set_len()`] on the [`File`]
+    /// if the length is less the required size.
+    ///
+    /// In order for the file to be resized, [`.write()`] access must be used.
+    ///
+    /// This has no affect on anonymous mappings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    /// use std::fs;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// let map = Map::with_options().write().resize_min(7).open(&path)?;
+    /// assert_eq!(14, map.len());
+    /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.open()`]: #method.open
+    /// [`.open_if()`]: #method.open_if
+    /// [`.map()`]: #method.map
+    /// [`.map_if()`]: #method.map_if
+    /// [`.set_len()`]: https://doc.rust-lang.org/std/fs/struct.File.html#method.set_len
+    /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
+    /// [`.write()`]: #method.write
     pub fn resize_min(&mut self, resize_min: usize) -> &mut Self {
         self.resize = Resize::AtLeast(resize_min);
         self
     }
 
-    /// TODO
+    /// Opens and maps a file using the current options specified by `self`.
+    ///
+    /// Unlike [`.open_if()`], when the requested offset or length lies outside of
+    /// the underlying file, an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::fs;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// assert!(Map::with_options().len(4).open(&path).is_ok());
+    /// assert!(Map::with_options().len(25).open(&path).is_err());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.open_if()`]: #method.open_if
     pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<T> {
         self.map(&self.open_options.open(path).map_err(map_file_err)?)
     }
 
-    /// TODO
+    /// Opens and maps a file with the options specified by `self` if the
+    /// provided byte range is valid.
+    ///
+    /// Unlike [`.open()`], when the requested offset or length lies outside of
+    /// the underlying file, `Ok(None)` will be returned rather than an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::fs;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// assert!(Map::with_options().len(4).open_if(&path).is_ok());
+    ///
+    /// let result = Map::with_options().len(25).open_if(&path);
+    /// assert!(result.is_ok());
+    /// assert!(result.unwrap().is_none());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.open()`]: #method.open
     pub fn open_if<P: AsRef<Path>>(&self, path: P) -> Result<Option<T>> {
         self.map_if(&self.open_options.open(path).map_err(map_file_err)?)
     }
 
-    /// TODO
+    /// Maps an open `File` using the current options specified by `self`.
+    ///
+    /// Unlike [`.map_if()`], when the requested offset or length lies outside of
+    /// the underlying file, an error is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::fs::OpenOptions;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// let f = OpenOptions::new()
+    ///     .read(true)
+    ///     .write(true)
+    ///     .create(true)
+    ///     .open(path)?;
+    /// f.set_len(8)?;
+    ///
+    /// assert!(Map::with_options().len(4).map(&f).is_ok());
+    /// assert!(Map::with_options().len(25).map(&f).is_err());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.map_if()`]: #method.map_if
     pub fn map(&self, f: &File) -> Result<T> {
         self.map_if(f)?
             .ok_or_else(|| Error::input(Operation::MapFile, Input::InvalidRange))
     }
 
-    /// TODO
+    /// Maps an open `File` with the options specified by `self` if the provided
+    /// byte range is valid.
+    ///
+    /// Unlike [`.map()`], when the requested offset or length lies outside of
+    /// the underlying file, `Ok(None)` will be returned rather than an error.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::fs::OpenOptions;
+    ///
+    /// # fn main() -> std::io::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// let f = OpenOptions::new()
+    ///     .read(true)
+    ///     .write(true)
+    ///     .create(true)
+    ///     .open(path)?;
+    /// f.set_len(8)?;
+    ///
+    /// assert!(Map::with_options().len(4).map_if(&f).is_ok());
+    ///
+    /// let result = Map::with_options().len(25).map_if(&f);
+    /// assert!(result.is_ok());
+    /// assert!(result.unwrap().is_none());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// [`.map()`]: #method.map
     pub fn map_if(&self, f: &File) -> Result<Option<T>> {
         let off = self.offset;
         let md = f.metadata().map_err(map_file_err)?;
@@ -1096,7 +1323,19 @@ impl<T: FromPtr> Options<T> {
         unsafe { Ok(Some(T::from_ptr(ptr.add(off - mapoff), len))) }
     }
 
-    /// TODO
+    /// Creates an anonymous allocation using the options specified by `self`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::MapMut;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// let map = MapMut::with_options().len_min(500).alloc()?;
+    /// assert!(map.len() >= 500);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn alloc(&self) -> Result<T> {
         let off = Size::page().offset(self.offset);
         let len = match self.len {
