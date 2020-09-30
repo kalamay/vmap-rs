@@ -380,7 +380,12 @@ impl Default for Size {
 
 #[cfg(test)]
 mod tests {
-    use super::Size;
+    use std::fs;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use std::str::from_utf8;
+
+    use super::*;
 
     #[test]
     fn allocation_size() {
@@ -404,5 +409,163 @@ mod tests {
         assert_eq!(sz.count(4096), 1);
         assert_eq!(sz.count(4097), 2);
         assert_eq!(sz.count(8192), 2);
+        assert_eq!(sz.offset(0), 0);
+        assert_eq!(sz.offset(1), 1);
+        assert_eq!(sz.offset(4095), 4095);
+        assert_eq!(sz.offset(4096), 0);
+        assert_eq!(sz.offset(4097), 1);
+    }
+
+    #[test]
+    fn alloc_min() -> Result<()> {
+        let sz = Size::allocation();
+        let mut map = MapMut::with_options().len_min(100).alloc()?;
+        assert_eq!(map.len(), sz.round(100));
+        assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..5]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello"), from_utf8(&map[..5]));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_exact() -> Result<()> {
+        let mut map = MapMut::with_options().len(5).alloc()?;
+        assert_eq!(map.len(), 5);
+        assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_offset() -> Result<()> {
+        // map to the offset of the last 5 bytes of a page, but map 6 bytes
+        let off = Size::allocation().size(1) - 5;
+        let mut map = MapMut::with_options().offset(off).len(6).alloc()?;
+
+        // force the page after the 5 bytes to be read-only
+        unsafe { os::protect(map.as_mut_ptr().add(5), 1, Protect::ReadOnly)? };
+
+        assert_eq!(map.len(), 6);
+        assert_eq!(Ok("\0\0\0\0\0\0"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            // writing one more byte will segfault
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello\0"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_end() -> Result<()> {
+        let len = fs::metadata("README.md")?.len() as usize;
+        let map = Map::with_options().offset(113).open("README.md")?;
+        assert!(map.len() >= 30);
+        assert_eq!(len - 113, map.len());
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_min() -> Result<()> {
+        let len = fs::metadata("README.md")?.len() as usize;
+        let map = Map::with_options()
+            .offset(113)
+            .len_min(30)
+            .open("README.md")?;
+        assert!(map.len() >= 30);
+        assert_eq!(len - 113, map.len());
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_max() -> Result<()> {
+        let map = Map::with_options()
+            .offset(113)
+            .len_max(30)
+            .open("README.md")?;
+        assert!(map.len() == 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_exaxt() -> Result<()> {
+        let map = Map::with_options().offset(113).len(30).open("README.md")?;
+        assert!(map.len() == 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn copy() -> Result<()> {
+        let mut map = MapMut::with_options()
+            .offset(113)
+            .len(30)
+            .copy()
+            .open("README.md")?;
+        assert_eq!(map.len(), 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"nice")?;
+        }
+        assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn write_into_mut() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("example");
+        fs::write(&path, "this is a test").expect("failed to write file");
+
+        let map = Map::with_options().write().resize(16).open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("this is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("this is a test\0\0"), from_utf8(&map[..]));
+
+        let mut map = map.into_map_mut()?;
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"that")?;
+            assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+            assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+        }
+
+        let map = map.into_map()?;
+        assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+
+        let map = Map::with_options().open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn truncate() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("example");
+        fs::write(&path, "this is a test").expect("failed to write file");
+
+        let map = Map::with_options()
+            .write()
+            .truncate(true)
+            .resize(16)
+            .open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"), from_utf8(&map[..]));
+        Ok(())
     }
 }
