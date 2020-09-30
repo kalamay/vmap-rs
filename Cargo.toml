@@ -19,7 +19,7 @@ libc = "0.2"
 rand = "0.7"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winnt", "sysinfoapi", "handleapi", "memoryapi"] }
+winapi = { version = "0.3", features = ["std", "basetsd", "minwindef", "sysinfoapi", "handleapi", "memoryapi", "fileapi"] }
 
 [dev-dependencies]
 tempdir = "0.3"

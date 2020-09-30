@@ -102,7 +102,7 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
-        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_READ | FILE_MAP_COPY),
+        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_COPY),
     };
 
     unsafe {
@@ -116,7 +116,7 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
     let (prot, access) = match prot {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
-        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_READ | FILE_MAP_COPY),
+        Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_COPY),
     };
 
     unsafe {
