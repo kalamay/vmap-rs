@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn write_into_mut() -> Result<()> {
         let tmp = tempdir::TempDir::new("vmap")?;
-        let path: PathBuf = tmp.path().join("example");
+        let path: PathBuf = tmp.path().join("write_into_mut");
         fs::write(&path, "this is a test").expect("failed to write file");
 
         let map = Map::with_options().write().resize(16).open(&path)?;
@@ -556,7 +556,7 @@ mod tests {
     #[test]
     fn truncate() -> Result<()> {
         let tmp = tempdir::TempDir::new("vmap")?;
-        let path: PathBuf = tmp.path().join("example");
+        let path: PathBuf = tmp.path().join("truncate");
         fs::write(&path, "this is a test").expect("failed to write file");
 
         let map = Map::with_options()
