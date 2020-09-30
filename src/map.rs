@@ -43,7 +43,7 @@ pub struct Map(MapMut);
 impl Map {
     /// TODO
     pub fn with_options() -> Options<Self> {
-        Options::new(false)
+        Options::new()
     }
 
     /// Creates a new read-only map object using the full range of a file.
@@ -165,7 +165,7 @@ impl Map {
     /// # fs::write(&path, b"this is a test")?;
     ///
     /// // Map the beginning of the file
-    /// let map = Map::with_options().write(true).len(14).open(path)?;
+    /// let map = Map::with_options().write().len(14).open(path)?;
     /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     ///
     /// let mut map = map.into_map_mut()?;
@@ -298,7 +298,9 @@ pub struct MapMut {
 impl MapMut {
     /// TODO
     pub fn with_options() -> Options<Self> {
-        Options::new(true)
+        let mut opts = Options::new();
+        opts.write();
+        opts
     }
 
     /// Create a new anonymous mapping at least as large as the hint.
@@ -312,7 +314,7 @@ impl MapMut {
     /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let mut map = MapMut::new(200, Protect::ReadCopy)?;
+    /// let mut map = MapMut::new(200, Protect::ReadWrite)?;
     /// {
     ///     let mut data = &mut map[..];
     ///     assert!(data.len() >= 200);
@@ -322,10 +324,12 @@ impl MapMut {
     /// # Ok(())
     /// # }
     /// ```
+    #[deprecated(
+        since = "0.4.0",
+        note = "use MapMut::with_options().len_min(hint).protect(prot).alloc() instead"
+    )]
     pub fn new(hint: usize, prot: Protect) -> Result<Self> {
-        let len = Size::allocation().round(hint);
-        let ptr = map_anon(len, prot)?;
-        unsafe { Ok(Self::from_ptr(ptr, len)) }
+        Self::with_options().len_min(hint).protect(prot).alloc()
     }
 
     /// Creates a new read/write map object using the full range of a file.
@@ -391,25 +395,25 @@ impl MapMut {
     /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let file = OpenOptions::new().read(true).open("src/lib.rs")?;
-    /// let mut map = MapMut::copy(&file, 33, 30)?;
+    /// let file = OpenOptions::new().read(true).open("README.md")?;
+    /// let mut map = MapMut::copy(&file, 113, 30)?;
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
     /// {
     ///     let mut data = &mut map[..];
-    ///     data.write_all(b"slow")?;
+    ///     data.write_all(b"nice")?;
     /// }
-    /// assert_eq!(Ok("slow and safe memory-mapped IO"), from_utf8(&map[..]));
+    /// assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
     /// ```
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().copy(true).offset(off).len(len).map(f) instead"
+        note = "use MapMut::with_options().copy().offset(off).len(len).map(f) instead"
     )]
     pub fn copy(f: &File, offset: usize, length: usize) -> Result<Self> {
         Self::with_options()
-            .copy(true)
+            .copy()
             .offset(offset)
             .len(length)
             .map(f)
@@ -424,11 +428,11 @@ impl MapMut {
     /// will be kept private.
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().copy(true).offset(off).len_max(len).map_if(f) instead"
+        note = "use MapMut::with_options().copy().offset(off).len_max(len).map_if(f) instead"
     )]
     pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
-            .copy(true)
+            .copy()
             .offset(offset)
             .len_max(max_length)
             .map_if(f)
@@ -646,6 +650,7 @@ impl TryFrom<Map> for MapMut {
 enum Len {
     End,
     Exact(usize),
+    Min(usize),
     Max(usize),
 }
 
@@ -661,8 +666,7 @@ pub struct Options<T> {
     resize: Resize,
     len: Len,
     offset: usize,
-    write: bool,
-    copy: bool,
+    protect: Protect,
     truncate: bool,
     phantom: PhantomData<T>,
 }
@@ -672,53 +676,50 @@ where
     T: FromPtr,
 {
     /// TODO
-    pub fn new(write: bool) -> Self {
+    pub fn new() -> Self {
         let mut open_options = OpenOptions::new();
-        open_options.read(true).write(write);
+        open_options.read(true);
         Self {
             open_options,
             resize: Resize::None,
             len: Len::End,
             offset: 0,
-            write,
-            copy: false,
+            protect: Protect::ReadOnly,
             truncate: false,
             phantom: PhantomData,
         }
     }
 
     /// TODO
-    pub fn new_from(write: bool, options: &OpenOptions) -> Self {
+    pub fn new_from(options: &OpenOptions) -> Self {
         let mut open_options = OpenOptions::new();
         open_options.clone_from(options);
-        open_options.read(true).write(write);
+        open_options.read(true);
         Self {
             open_options,
             resize: Resize::None,
             len: Len::End,
             offset: 0,
-            write,
-            copy: false,
+            protect: Protect::ReadOnly,
             truncate: false,
             phantom: PhantomData,
         }
     }
 
     /// TODO
-    pub fn write(&mut self, write: bool) -> &mut Self {
-        self.open_options.write(write);
-        self.write = write;
-        if write {
-            self.copy = false
-        }
-        self
+    pub fn write(&mut self) -> &mut Self {
+        self.protect(Protect::ReadWrite)
     }
 
     /// TODO
-    pub fn copy(&mut self, copy: bool) -> &mut Self {
-        self.open_options.write(false);
-        self.write = false;
-        self.copy = copy;
+    pub fn copy(&mut self) -> &mut Self {
+        self.protect(Protect::ReadCopy)
+    }
+
+    /// TODO
+    pub fn protect(&mut self, protect: Protect) -> &mut Self {
+        self.open_options.write(protect == Protect::ReadWrite);
+        self.protect = protect;
         self
     }
 
@@ -750,6 +751,12 @@ where
     /// TODO
     pub fn len(&mut self, len: usize) -> &mut Self {
         self.len = Len::Exact(len);
+        self
+    }
+
+    /// TODO
+    pub fn len_min(&mut self, len_min: usize) -> &mut Self {
+        self.len = Len::Min(len_min);
         self
     }
 
@@ -810,31 +817,29 @@ where
 
         let max = flen - off;
         let len = match self.len {
-            Len::End => max,
+            Len::Min(l) | Len::Exact(l) if l > max => return Ok(None),
+            Len::Min(_) | Len::End => max,
             Len::Max(l) => cmp::min(l, max),
-            Len::Exact(l) => {
-                if l > max {
-                    return Ok(None);
-                }
-                l
-            }
+            Len::Exact(l) => l,
         };
 
-        let sz = Size::allocation();
-        let roff = sz.truncate(off);
-        let rlen = len + (off - roff);
-        let ptr = map_file(f, roff, rlen, self.protect())?;
-        unsafe { Ok(Some(T::from_ptr(ptr.add(off - roff), len))) }
+        let mapoff = Size::allocation().truncate(off);
+        let maplen = len + (off - mapoff);
+        let ptr = map_file(f, mapoff, maplen, self.protect)?;
+        unsafe { Ok(Some(T::from_ptr(ptr.add(off - mapoff), len))) }
     }
 
-    fn protect(&self) -> Protect {
-        if self.copy {
-            Protect::ReadCopy
-        } else if self.write {
-            Protect::ReadWrite
-        } else {
-            Protect::ReadOnly
-        }
+    /// TODO
+    pub fn alloc(&self) -> Result<T> {
+        let off = Size::page().offset(self.offset);
+        let len = match self.len {
+            Len::End => Size::allocation().round(off) - off,
+            Len::Min(l) => Size::allocation().round(off + l) - off,
+            Len::Max(l) | Len::Exact(l) => l,
+        };
+
+        let ptr = map_anon(off + len, self.protect)?;
+        unsafe { Ok(T::from_ptr(ptr.add(off), len)) }
     }
 }
 

@@ -26,7 +26,7 @@ pub trait Span: Deref<Target = [u8]> + Sized + sealed::Sealed {
 }
 
 /// General trait for working with any memory-safe representation of a
-/// contiguous region of arbitrary memory with interior mutability.
+/// contiguous region of arbitrary mutable memory.
 pub trait SpanMut: Span + DerefMut {
     /// Get a mutable pointer to the start of the allocated region.
     fn as_mut_ptr(&mut self) -> *mut u8;

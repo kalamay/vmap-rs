@@ -28,7 +28,7 @@
 //! # fs::write(&path, b"this is a test")?;
 //!
 //! // Open with write permissions so the Map can be converted into a MapMut
-//! let map = Map::with_options().write(true).len(14).open(&path)?;
+//! let map = Map::with_options().write().len(14).open(&path)?;
 //! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
