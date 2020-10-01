@@ -1,10 +1,9 @@
 use super::{SeqRead, SeqWrite};
 use crate::os::{map_ring, unmap_ring};
-use crate::AllocSize;
+use crate::{Result, Size};
 
-use std;
 use std::cmp;
-use std::io::{BufRead, Read, Result, Write};
+use std::io::{self, BufRead, Read, Write};
 
 /// Fixed-size reliable read/write buffer with sequential address mapping.
 ///
@@ -18,16 +17,14 @@ use std::io::{BufRead, Read, Result, Write};
 /// furthur writes may be performed until a read occurs. The writable length
 /// sequence is the capacity of the buffer, less any pending readable bytes.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
 /// use vmap::io::{Ring, SeqWrite};
 /// use std::io::{BufRead, Read, Write};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// let mut buf = Ring::new(4000)?;
+/// let mut buf = Ring::new(4000).unwrap();
 /// let mut i = 1;
 /// while buf.write_len() > 20 {
 ///     write!(&mut buf, "this is test line {}\n", i)?;
@@ -45,7 +42,7 @@ use std::io::{BufRead, Read, Result, Write};
 #[derive(Debug)]
 pub struct Ring {
     ptr: *mut u8,
-    len: usize,
+    mask: u64,
     rpos: u64,
     wpos: u64,
 }
@@ -58,22 +55,20 @@ impl Ring {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = AllocSize::new().round(hint);
-        unsafe {
-            let ptr = map_ring(len)?;
-            Ok(Self {
-                ptr: ptr,
-                len: len,
-                rpos: 0,
-                wpos: 0,
-            })
-        }
+        let len = Size::alloc().round(hint);
+        let ptr = map_ring(len)?;
+        Ok(Self {
+            ptr,
+            mask: len as u64 - 1,
+            rpos: 0,
+            wpos: 0,
+        })
     }
 }
 
 impl Drop for Ring {
     fn drop(&mut self) {
-        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default();
+        unsafe { unmap_ring(self.ptr, self.write_capacity()) }.unwrap_or_default();
     }
 }
 
@@ -82,7 +77,7 @@ impl SeqRead for Ring {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        (self.rpos % self.len as u64) as usize
+        (self.rpos & self.mask) as usize
     }
     fn read_len(&self) -> usize {
         (self.wpos - self.rpos) as usize
@@ -94,13 +89,13 @@ impl SeqWrite for Ring {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos % self.len as u64) as usize
+        (self.wpos & self.mask) as usize
     }
     fn write_len(&self) -> usize {
-        self.len - self.read_len()
+        self.write_capacity() - self.read_len()
     }
     fn write_capacity(&self) -> usize {
-        self.len
+        self.mask as usize + 1
     }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
@@ -108,7 +103,7 @@ impl SeqWrite for Ring {
 }
 
 impl BufRead for Ring {
-    fn fill_buf(&mut self) -> Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         Ok(self.as_read_slice(std::usize::MAX))
     }
 
@@ -118,17 +113,17 @@ impl BufRead for Ring {
 }
 
 impl Read for Ring {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_from(buf)
     }
 }
 
 impl Write for Ring {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_into(buf)
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -144,16 +139,14 @@ impl Write for Ring {
 /// bytes from the read side of the queue. The writeable size is always equal
 /// to the overall capacity of the buffer.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
-/// use vmap::io::{InfiniteRing, SeqWrite};
+/// use vmap::io::{InfiniteRing, SeqRead, SeqWrite};
 /// use std::io::{BufRead, Read, Write};
 ///
 /// # fn main() -> std::io::Result<()> {
-/// let mut buf = InfiniteRing::new(4000)?;
+/// let mut buf = InfiniteRing::new(4000).unwrap();
 /// let mut i = 1;
 /// let mut total = 0;
 /// while total < buf.write_capacity() {
@@ -163,9 +156,13 @@ impl Write for Ring {
 ///     i += 1;
 /// }
 ///
+/// // skip over the overwritten tail
+/// buf.consume(20 - buf.read_offset());
+///
+/// // read the next line
 /// let mut line = String::new();
 /// let len = buf.read_line(&mut line)?;
-/// println!("total = {}", total);
+///
 /// assert_eq!(len, 20);
 /// assert_eq!(&line[line.len()-20..], "this is test line 2\n");
 /// # Ok(())
@@ -174,7 +171,7 @@ impl Write for Ring {
 #[derive(Debug)]
 pub struct InfiniteRing {
     ptr: *mut u8,
-    len: usize,
+    mask: u64,
     rlen: u64,
     wpos: u64,
 }
@@ -187,22 +184,20 @@ impl InfiniteRing {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = AllocSize::new().round(hint);
-        unsafe {
-            let ptr = map_ring(len)?;
-            Ok(Self {
-                ptr: ptr,
-                len: len,
-                rlen: 0,
-                wpos: 0,
-            })
-        }
+        let len = Size::alloc().round(hint);
+        let ptr = map_ring(len)?;
+        Ok(Self {
+            ptr,
+            mask: len as u64 - 1,
+            rlen: 0,
+            wpos: 0,
+        })
     }
 }
 
 impl Drop for InfiniteRing {
     fn drop(&mut self) {
-        unsafe { unmap_ring(self.ptr, self.len) }.unwrap_or_default()
+        unsafe { unmap_ring(self.ptr, self.write_capacity()) }.unwrap_or_default()
     }
 }
 
@@ -211,7 +206,7 @@ impl SeqRead for InfiniteRing {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        ((self.wpos - self.rlen) % self.len as u64) as usize
+        ((self.wpos - self.rlen) & self.mask) as usize
     }
     fn read_len(&self) -> usize {
         self.rlen as usize
@@ -223,22 +218,22 @@ impl SeqWrite for InfiniteRing {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos % self.len as u64) as usize
+        (self.wpos & self.mask) as usize
     }
     fn write_len(&self) -> usize {
-        self.len
+        self.write_capacity()
     }
     fn write_capacity(&self) -> usize {
-        self.len
+        self.mask as usize + 1
     }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
-        self.rlen = cmp::min(self.rlen + len as u64, self.len as u64);
+        self.rlen = cmp::min(self.rlen + len as u64, self.mask + 1);
     }
 }
 
 impl BufRead for InfiniteRing {
-    fn fill_buf(&mut self) -> Result<&[u8]> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
         Ok(self.as_read_slice(std::usize::MAX))
     }
 
@@ -248,17 +243,17 @@ impl BufRead for InfiniteRing {
 }
 
 impl Read for InfiniteRing {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_from(buf)
     }
 }
 
 impl Write for InfiniteRing {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_into(buf)
     }
 
-    fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         let len = {
             let dst = self.as_write_slice(buf.len());
             let len = dst.len();
@@ -270,7 +265,7 @@ impl Write for InfiniteRing {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }

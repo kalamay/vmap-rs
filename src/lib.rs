@@ -8,63 +8,53 @@
 //! Additionally, a variety of buffer implementations are provided in the
 //! [`vmap::io`](io/index.html) module.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```
-//! # extern crate vmap;
-//! # extern crate tempdir;
-//! #
 //! use vmap::Map;
 //! use std::io::Write;
 //! use std::fs::OpenOptions;
 //! use std::path::PathBuf;
+//! use std::str::from_utf8;
 //! # use std::fs;
 //!
-//! # fn main() -> std::io::Result<()> {
+//! # fn main() -> vmap::Result<()> {
 //! # let tmp = tempdir::TempDir::new("vmap")?;
 //! let path: PathBuf = /* path to file */
 //! # tmp.path().join("example");
 //! # fs::write(&path, b"this is a test")?;
-//! let file = OpenOptions::new().read(true).write(true).open(&path)?;
 //!
-//! // Map the beginning of the file
-//! let map = Map::file(&file, 0, 14)?;
-//! assert_eq!(b"this is a test", &map[..]);
+//! // Open with write permissions so the Map can be converted into a MapMut
+//! let map = Map::with_options().write().len(14).open(&path)?;
+//! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
-//! // ... we could have started with MapMut::file(...)
-//! let mut map = map.make_mut()?;
+//! // ... we could have started with MapMut::with_options()
+//! let mut map = map.into_map_mut()?;
 //! {
 //!     let mut data = &mut map[..];
 //!     data.write_all(b"that")?;
 //! }
 //!
 //! // Move the MapMut back into a Map
-//! let map = map.make_read_only()?;
-//! assert_eq!(b"that is a test", &map[..]);
+//! let map = map.into_map()?;
+//! assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
 //! # Ok(())
 //! # }
 //! ```
 
 #![deny(missing_docs)]
 
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Low-level cross-platform virtual memory functions
-pub mod os {
-    #[cfg(unix)]
-    mod unix;
-    #[cfg(unix)]
-    pub use self::unix::*;
+pub mod os;
 
-    #[cfg(windows)]
-    mod windows;
-    #[cfg(windows)]
-    pub use self::windows::*;
-}
+mod error;
+pub use self::error::{ConvertResult, Error, Input, Operation, Result};
 
 mod map;
-pub use self::map::{Map, MapMut};
+pub use self::map::{Map, MapMut, Options};
 
 pub mod io;
 
@@ -72,6 +62,7 @@ pub mod io;
 pub type Pgno = u32;
 
 /// Protection level for a page.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Protect {
     /// The page(s) may only be read from.
     ReadOnly,
@@ -82,6 +73,7 @@ pub enum Protect {
 }
 
 /// Desired behavior when flushing write changes.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Flush {
     /// Request dirty pages to be written immediately and block until completed.
     ///
@@ -92,6 +84,7 @@ pub enum Flush {
 }
 
 /// Hint for the access pattern of the underlying mapping.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AdviseAccess {
     /// Use the system default behavior.
     Normal,
@@ -102,6 +95,7 @@ pub enum AdviseAccess {
 }
 
 /// Hint for the immediacy of accessing the underlying mapping.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum AdviseUsage {
     /// Use the system default behavior.
     Normal,
@@ -111,20 +105,50 @@ pub enum AdviseUsage {
     WillNotNeed,
 }
 
+/// Byte extent type used for length and resize options.
+///
+/// For usage information, see the [`.len()`] or [`.resize()`] methods of the
+/// [`Options`] builder type.
+///
+/// [`.len()`]: struct.Options.html#method.len
+/// [`.resize()`]: struct.Options.html#method.resize
+/// [`Options`]: struct.Options.html
+pub enum Extent {
+    /// A dynamic extent that implies the end byte position of an underlying
+    /// file resource or anonymous allocation.
+    End,
+    /// A static extent that referers to an exact byte position.
+    Exact(usize),
+    /// A dynamic extent that referes a byte position of at least a particular
+    /// offset.
+    Min(usize),
+    /// A dynamic extent that referes a byte position of no greater than a
+    /// particular offset.
+    Max(usize),
+}
+
+impl From<usize> for Extent {
+    fn from(v: usize) -> Self {
+        Self::Exact(v)
+    }
+}
+
 /// Gets a cached version of the system page size.
 ///
+/// # Examples
+///
 /// ```
-/// # extern crate vmap;
-/// println!("the system page size is {} bytes", vmap::page_size());
+/// let page_size = vmap::page_size();
+/// println!("the system page size is {} bytes", page_size);
+/// assert!(page_size >= 4096);
 /// ```
 pub fn page_size() -> usize {
-    static SIZE: AtomicUsize = AtomicUsize::new(0);
-    let mut size: usize = SIZE.load(Ordering::Relaxed);
+    let size = PAGE_SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = crate::os::page_size();
-        SIZE.store(size, Ordering::Relaxed);
+        load_system_info().0 as usize
+    } else {
+        size
     }
-    size
 }
 
 /// Gets a cached version of the system allocation granularity size.
@@ -132,26 +156,42 @@ pub fn page_size() -> usize {
 /// On Windows this value is typically 64k. Otherwise it is the same as the
 /// page size.
 ///
+/// # Examples
+///
 /// ```
-/// # extern crate vmap;
-/// println!("the system allocation granularity is {} bytes", vmap::allocation_size());
+/// let alloc_size = vmap::allocation_size();
+/// println!("the system allocation granularity is {} bytes", alloc_size);
+/// if cfg!(windows) {
+///     assert!(alloc_size >= 65536);
+/// } else {
+///     assert!(alloc_size >= 4096);
+/// }
 /// ```
 pub fn allocation_size() -> usize {
-    static SIZE: AtomicUsize = AtomicUsize::new(0);
-    let mut size: usize = SIZE.load(Ordering::Relaxed);
+    let size = ALLOC_SIZE.load(Ordering::Relaxed);
     if size == 0 {
-        size = crate::os::allocation_size();
-        SIZE.store(size, Ordering::Relaxed);
+        load_system_info().1 as usize
+    } else {
+        size
     }
-    size
 }
 
-/// Type for calculation page size information.
+static PAGE_SIZE: AtomicUsize = AtomicUsize::new(0);
+static ALLOC_SIZE: AtomicUsize = AtomicUsize::new(0);
+
+#[inline]
+fn load_system_info() -> (u32, u32) {
+    let (page, alloc) = self::os::system_info();
+    PAGE_SIZE.store(page as usize, Ordering::Relaxed);
+    ALLOC_SIZE.store(alloc as usize, Ordering::Relaxed);
+    (page, alloc)
+}
+
+/// Type for calculation system page or allocation size information.
 ///
-/// # Example
+/// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// let size = vmap::AllocSize::new();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
@@ -165,16 +205,56 @@ pub fn allocation_size() -> usize {
 /// let size = size.size(3);
 /// println!("3 pages are {} bytes", size);
 /// ```
-#[derive(Copy, Clone)]
-pub struct AllocSize(usize);
+#[deprecated(since = "0.4.0", note = "use Size instead")]
+pub type AllocSize = Size;
 
-impl AllocSize {
+/// Type for calculation system page or allocation size information.
+///
+/// # Examples
+///
+/// ```
+/// let size = vmap::Size::alloc();
+/// let pages = size.count(200);
+/// assert_eq!(pages, 1);
+///
+/// let round = size.round(200);
+/// println!("200 bytes requires a {} byte mapping", round);
+///
+/// let count = size.count(10000);
+/// println!("10000 bytes requires {} pages", count);
+///
+/// let size = size.size(3);
+/// println!("3 pages are {} bytes", size);
+/// ```
+#[derive(Copy, Clone)]
+pub struct Size(usize);
+
+impl Size {
+    /// Creates a type for calculating allocation numbers and byte offsets.
+    ///
+    /// The size is determined from the system's configurated allocation
+    /// granularity. This value is cached making it very cheap to construct.
+    #[inline]
+    #[deprecated(since = "0.4.0", note = "use Size::alloc() instead")]
+    pub fn new() -> Self {
+        Self::alloc()
+    }
+
     /// Creates a type for calculating page numbers and byte offsets.
     ///
     /// The size is determined from the system's configurated page size.
     /// This value is cached making it very cheap to construct.
     #[inline]
-    pub fn new() -> Self {
+    pub fn page() -> Self {
+        unsafe { Self::with_size(page_size()) }
+    }
+
+    /// Creates a type for calculating allocation numbers and byte offsets.
+    ///
+    /// The size is determined from the system's configurated allocation
+    /// granularity. This value is cached making it very cheap to construct.
+    #[inline]
+    pub fn alloc() -> Self {
         unsafe { Self::with_size(allocation_size()) }
     }
 
@@ -184,33 +264,33 @@ impl AllocSize {
     /// # Safety
     ///
     /// The size *must* be a power-of-2. To successfully map pages, the size
-    /// must also be a mutliple of the actual system page size. Hypothetically
-    /// this could be used to simulate larger page sizes.
+    /// must also be a mutliple of the actual system allocation granularity.
+    /// Hypothetically this could be used to simulate larger page sizes, but
+    /// this has no bearing on the TLB cache.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = unsafe { AllocSize::with_size(sys << 2) };
+    /// let size = unsafe { Size::with_size(sys << 2) };
     /// assert_eq!(size.round(1), sys << 2);   // probably 16384
     /// ```
     #[inline]
     pub unsafe fn with_size(size: usize) -> Self {
-        AllocSize(size)
+        Size(size)
     }
 
     /// Round a byte size up to the nearest page size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::alloc();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -224,13 +304,13 @@ impl AllocSize {
 
     /// Round a byte size down to the nearest page size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::alloc();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -244,13 +324,13 @@ impl AllocSize {
 
     /// Calculate the byte offset from page containing the position.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::alloc();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
@@ -261,13 +341,13 @@ impl AllocSize {
 
     /// Convert a page count into a byte size.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::alloc();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
@@ -279,13 +359,13 @@ impl AllocSize {
 
     /// Covert a byte size into the number of pages necessary to contain it.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```
-    /// use vmap::AllocSize;
+    /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = AllocSize::new();
+    /// let size = Size::alloc();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -310,13 +390,91 @@ impl AllocSize {
     }
 }
 
+impl Default for Size {
+    fn default() -> Self {
+        Self::alloc()
+    }
+}
+
+/// General trait for working with any memory-safe representation of a
+/// contiguous region of arbitrary memory.
+pub trait Span: Deref<Target = [u8]> + Sized + sealed::Span {
+    /// Get the length of the allocated region.
+    fn len(&self) -> usize;
+
+    /// Get the pointer to the start of the allocated region.
+    fn as_ptr(&self) -> *const u8;
+
+    /// Tests if the span covers zero bytes.
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// General trait for working with any memory-safe representation of a
+/// contiguous region of arbitrary mutable memory.
+pub trait SpanMut: Span + DerefMut {
+    /// Get a mutable pointer to the start of the allocated region.
+    fn as_mut_ptr(&mut self) -> *mut u8;
+}
+
+impl<'a> Span for &'a [u8] {
+    #[inline]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        <[u8]>::as_ptr(self)
+    }
+}
+
+impl<'a> Span for &'a mut [u8] {
+    #[inline]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+
+    #[inline]
+    fn as_ptr(&self) -> *const u8 {
+        <[u8]>::as_ptr(self)
+    }
+}
+
+impl<'a> SpanMut for &'a mut [u8] {
+    #[inline]
+    fn as_mut_ptr(&mut self) -> *mut u8 {
+        <[u8]>::as_mut_ptr(self)
+    }
+}
+
+mod sealed {
+    pub trait Span {}
+
+    impl Span for super::Map {}
+    impl Span for super::MapMut {}
+    impl<'a> Span for &'a [u8] {}
+    impl<'a> Span for &'a mut [u8] {}
+
+    pub trait FromPtr {
+        unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::AllocSize;
+    use std::fs;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use std::str::from_utf8;
+
+    use super::*;
 
     #[test]
     fn allocation_size() {
-        let sz = unsafe { AllocSize::with_size(4096) };
+        let sz = unsafe { Size::with_size(4096) };
         assert_eq!(sz.round(0), 0);
         assert_eq!(sz.round(1), 4096);
         assert_eq!(sz.round(4095), 4096);
@@ -336,5 +494,183 @@ mod tests {
         assert_eq!(sz.count(4096), 1);
         assert_eq!(sz.count(4097), 2);
         assert_eq!(sz.count(8192), 2);
+        assert_eq!(sz.offset(0), 0);
+        assert_eq!(sz.offset(1), 1);
+        assert_eq!(sz.offset(4095), 4095);
+        assert_eq!(sz.offset(4096), 0);
+        assert_eq!(sz.offset(4097), 1);
+    }
+
+    #[test]
+    fn alloc_min() -> Result<()> {
+        let sz = Size::alloc();
+        let mut map = MapMut::with_options().len(Extent::Min(100)).alloc()?;
+        assert_eq!(map.len(), sz.round(100));
+        assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..5]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello"), from_utf8(&map[..5]));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_exact() -> Result<()> {
+        let mut map = MapMut::with_options().len(5).alloc()?;
+        assert_eq!(map.len(), 5);
+        assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn alloc_offset() -> Result<()> {
+        // map to the offset of the last 5 bytes of a page, but map 6 bytes
+        let off = Size::alloc().size(1) - 5;
+        let mut map = MapMut::with_options().offset(off).len(6).alloc()?;
+
+        // force the page after the 5 bytes to be read-only
+        unsafe { os::protect(map.as_mut_ptr().add(5), 1, Protect::ReadOnly)? };
+
+        assert_eq!(map.len(), 6);
+        assert_eq!(Ok("\0\0\0\0\0\0"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            // writing one more byte will segfault
+            data.write_all(b"hello")?;
+        }
+        assert_eq!(Ok("hello\0"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_end() -> Result<()> {
+        let (_tmp, path, len) = write_default("read_end")?;
+        let map = Map::with_options().offset(29).open(&path)?;
+        assert!(map.len() >= 30);
+        assert_eq!(len - 29, map.len());
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_min() -> Result<()> {
+        let (_tmp, path, len) = write_default("read_min")?;
+        let map = Map::with_options()
+            .offset(29)
+            .len(Extent::Min(30))
+            .open(&path)?;
+        println!("path = {:?}, len = {}, map = {}", path, len, map.len());
+        assert!(map.len() >= 30);
+        assert_eq!(len - 29, map.len());
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_max() -> Result<()> {
+        let (_tmp, path, _len) = write_default("read_max")?;
+        let map = Map::with_options()
+            .offset(29)
+            .len(Extent::Max(30))
+            .open(&path)?;
+        assert!(map.len() == 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn read_exact() -> Result<()> {
+        let (_tmp, path, _len) = write_default("read_exact")?;
+        let map = Map::with_options().offset(29).len(30).open(&path)?;
+        assert!(map.len() == 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn copy() -> Result<()> {
+        let (_tmp, path, _len) = write_default("copy")?;
+        let mut map = MapMut::with_options()
+            .offset(29)
+            .len(30)
+            .copy()
+            .open(&path)?;
+        assert_eq!(map.len(), 30);
+        assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"nice")?;
+        }
+        assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    #[test]
+    fn write_into_mut() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("write_into_mut");
+        fs::write(&path, "this is a test").expect("failed to write file");
+
+        let map = Map::with_options().write().resize(16).open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("this is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("this is a test\0\0"), from_utf8(&map[..]));
+
+        let mut map = map.into_map_mut()?;
+        {
+            let mut data = &mut map[..];
+            data.write_all(b"that")?;
+            assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+            assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+        }
+
+        let map = map.into_map()?;
+        assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+
+        let map = Map::with_options().open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn truncate() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("truncate");
+        fs::write(&path, "this is a test").expect("failed to write file");
+
+        let map = Map::with_options()
+            .write()
+            .truncate(true)
+            .resize(16)
+            .open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(Ok("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"), from_utf8(&map[..]));
+        Ok(())
+    }
+
+    type WriteResult = Result<(tempdir::TempDir, PathBuf, usize)>;
+
+    fn write_tmp(name: &'static str, msg: &'static str) -> WriteResult {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join(name);
+        fs::write(&path, msg)?;
+        Ok((tmp, path, msg.len()))
+    }
+
+    fn write_default(name: &'static str) -> WriteResult {
+        write_tmp(
+            name,
+            "A cross-platform library for fast and safe memory-mapped IO in Rust",
+        )
     }
 }

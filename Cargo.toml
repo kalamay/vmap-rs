@@ -1,6 +1,6 @@
 [package]
 name = "vmap"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Jeremy Larkin <jeremylarkin@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/kalamay/vmap-rs"
@@ -9,6 +9,9 @@ description = "Cross-platform library for fast and safe memory-mapped IO"
 keywords = ["mmap", "io", "file", "circular-buffer", "ring-buffer"]
 edition = "2018"
 
+[dependencies]
+system_error = "0.1.1"
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
@@ -16,7 +19,7 @@ libc = "0.2"
 rand = "0.7"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winnt", "sysinfoapi", "handleapi", "memoryapi"] }
+winapi = { version = "0.3", features = ["std", "basetsd", "minwindef", "sysinfoapi", "handleapi", "memoryapi", "fileapi"] }
 
 [dev-dependencies]
 tempdir = "0.3"

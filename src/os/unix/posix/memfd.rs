@@ -1,7 +1,6 @@
-extern crate libc;
-
-use std::io::{Error, Result};
 use std::os::raw::c_int;
+
+use crate::{Error, Operation, Result};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn memfd_open() -> Result<c_int> {
@@ -15,19 +14,16 @@ pub fn memfd_open() -> Result<c_int> {
         )
     };
     if fd < 0 {
-        Err(Error::last_os_error())
+        Err(Error::last_os_error(Operation::MemoryFd))
     } else {
         Ok(fd as c_int)
     }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-extern crate rand;
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn memfd_open() -> Result<c_int> {
-    use self::rand::distributions::Alphanumeric;
-    use self::rand::{thread_rng, Rng};
+    use rand::distributions::Alphanumeric;
+    use rand::{thread_rng, Rng};
 
     const OFLAGS: c_int = libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC;
 
@@ -47,7 +43,7 @@ pub fn memfd_open() -> Result<c_int> {
 
         let fd = unsafe { libc::shm_open(path.as_ptr(), OFLAGS, 0600) };
         if fd < 0 {
-            let err = Error::last_os_error();
+            let err = Error::last_os_error(Operation::MemoryFd);
             if err.raw_os_error() != Some(libc::EEXIST) {
                 return Err(err);
             }

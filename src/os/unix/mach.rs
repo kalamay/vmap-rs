@@ -1,13 +1,12 @@
 #![allow(non_camel_case_types)]
 
-extern crate libc;
+use std::os::raw::{c_int, c_uint};
 
-use std::ffi::CStr;
-use std::io::{Error, ErrorKind, Result};
-use std::os::raw::{c_char, c_int, c_uint};
-use std::{error, fmt};
+use libc::uintptr_t;
 
-use self::libc::uintptr_t;
+use crate::{Error, Operation, Result};
+
+use self::Operation::*;
 
 type kern_return_t = c_int;
 type vm_offset_t = uintptr_t;
@@ -33,8 +32,6 @@ const VM_FLAGS_OVERWRITE: c_int = 0x4000;
 const VM_INHERIT_NONE: vm_inherit_t = 2;
 
 extern "C" {
-    fn mach_error_string(code: kern_return_t) -> *const c_char;
-
     fn mach_task_self() -> mach_port_t;
 
     fn vm_allocate(
@@ -74,99 +71,60 @@ extern "C" {
     ) -> kern_return_t;
 }
 
-#[derive(Debug)]
-pub struct MachError {
-    code: kern_return_t,
-    msg: &'static str,
-}
-
-impl MachError {
-    pub fn new(code: kern_return_t, msg: &'static str) -> Self {
-        Self {
-            code: code,
-            msg: msg,
-        }
-    }
-}
-
-impl error::Error for MachError {
-    fn description(&self) -> &str {
-        "mach error"
-    }
-    fn cause(&self) -> Option<&dyn error::Error> {
-        None
-    }
-}
-
-impl fmt::Display for MachError {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        unsafe {
-            let msg = CStr::from_ptr(mach_error_string(self.code));
-            match msg.to_str() {
-                Err(ec) => write!(fmt, "{} (invalid error message: {})", self.msg, ec),
-                Ok(val) => write!(fmt, "{}: {}", self.msg, val),
-            }
-        }
-    }
-}
-
 /// Creates an anonymous circular allocation.
 ///
 /// The length is the size of the sequential range, and the offset of
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
-pub unsafe fn map_ring(len: usize) -> Result<*mut u8> {
-    let port = mach_task_self();
+pub fn map_ring(len: usize) -> Result<*mut u8> {
+    let port = unsafe { mach_task_self() };
     let mut addr: vm_address_t = 0;
     let mut len = len as vm_size_t;
     let mut map_port: mem_entry_name_port_t = 0;
 
-    let ret = vm_allocate(port, &mut addr, 2 * len, VM_FLAGS_ANYWHERE);
+    let ret = unsafe { vm_allocate(port, &mut addr, 2 * len, VM_FLAGS_ANYWHERE) };
     if ret != KERN_SUCCESS {
-        return Err(Error::new(
-            ErrorKind::Other,
-            MachError::new(ret, "failed to allocate full region"),
-        ));
+        return Err(Error::kernel(RingAllocate, ret));
     }
 
-    let ret = vm_allocate(port, &mut addr, len, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE);
+    let ret = unsafe { vm_allocate(port, &mut addr, len, VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE) };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
-        return Err(Error::new(
-            ErrorKind::Other,
-            MachError::new(ret, "failed to allocate first half"),
-        ));
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
+        return Err(Error::kernel(RingPrimary, ret));
     }
 
-    let ret = mach_make_memory_entry(port, &mut len, addr, VM_PROT_DEFAULT, &mut map_port, 0);
+    let ret =
+        unsafe { mach_make_memory_entry(port, &mut len, addr, VM_PROT_DEFAULT, &mut map_port, 0) };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
-        return Err(Error::new(
-            ErrorKind::Other,
-            MachError::new(ret, "failed to make memory entry"),
-        ));
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
+        return Err(Error::kernel(RingEntry, ret));
     }
 
     let mut half = addr + len;
-    let ret = vm_map(
-        port,
-        &mut half,
-        len,
-        0, // mask
-        VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
-        map_port,
-        0,     // offset
-        false, // copy
-        VM_PROT_DEFAULT,
-        VM_PROT_DEFAULT,
-        VM_INHERIT_NONE,
-    );
+    let ret = unsafe {
+        vm_map(
+            port,
+            &mut half,
+            len,
+            0, // mask
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            map_port,
+            0,     // offset
+            false, // copy
+            VM_PROT_DEFAULT,
+            VM_PROT_DEFAULT,
+            VM_INHERIT_NONE,
+        )
+    };
     if ret != KERN_SUCCESS {
-        vm_deallocate(port, addr, 2 * len);
-        return Err(Error::new(
-            ErrorKind::Other,
-            MachError::new(ret, "failed to map memory"),
-        ));
+        unsafe {
+            vm_deallocate(port, addr, 2 * len);
+        }
+        return Err(Error::kernel(RingSecondary, ret));
     }
 
     Ok(addr as *mut u8)
@@ -177,10 +135,7 @@ pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     let port = mach_task_self();
     let ret = vm_deallocate(port, pg as vm_address_t, 2 * len);
     if ret != KERN_SUCCESS {
-        Err(Error::new(
-            ErrorKind::Other,
-            MachError::new(ret, "failed to deallocate full region"),
-        ))
+        Err(Error::kernel(RingDeallocate, ret))
     } else {
         Ok(())
     }

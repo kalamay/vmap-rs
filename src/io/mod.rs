@@ -16,7 +16,7 @@ mod buffer;
 pub use self::buffer::*;
 
 use std::cmp;
-use std::io::{BufRead, Result};
+use std::io::{self, BufRead};
 use std::slice;
 
 /// Common input trait for all buffers.
@@ -41,14 +41,14 @@ pub trait SeqRead: BufRead {
     fn as_read_slice(&self, max: usize) -> &[u8] {
         unsafe {
             slice::from_raw_parts(
-                self.as_read_ptr().offset(self.read_offset() as isize),
+                self.as_read_ptr().add(self.read_offset()),
                 cmp::min(self.read_len(), max),
             )
         }
     }
 
     /// Perform a read and consume from the read slice.
-    fn read_from(&mut self, into: &mut [u8]) -> Result<usize> {
+    fn read_from(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let len = {
             let src = self.as_read_slice(into.len());
             let len = src.len();
@@ -92,14 +92,14 @@ pub trait SeqWrite {
     fn as_write_slice(&mut self, max: usize) -> &mut [u8] {
         unsafe {
             slice::from_raw_parts_mut(
-                self.as_write_ptr().offset(self.write_offset() as isize),
+                self.as_write_ptr().add(self.write_offset()),
                 cmp::min(self.write_len(), max),
             )
         }
     }
 
     /// Perform a write and feed into the write slice.
-    fn write_into(&mut self, from: &[u8]) -> Result<usize> {
+    fn write_into(&mut self, from: &[u8]) -> io::Result<usize> {
         let len = {
             let dst = self.as_write_slice(from.len());
             let len = dst.len();
@@ -113,13 +113,13 @@ pub trait SeqWrite {
 
 #[cfg(test)]
 mod tests {
-    use super::super::AllocSize;
+    use super::super::Size;
     use super::{InfiniteRing, Ring, SeqRead, SeqWrite};
     use std::io::{BufRead, Write};
 
     #[test]
     fn size() {
-        let sz = AllocSize::new();
+        let sz = Size::alloc();
         let mut buf = Ring::new(1000).expect("failed to create buffer");
         assert_eq!(buf.write_capacity(), sz.size(1));
         assert_eq!(buf.read_len(), 0);
