@@ -12,7 +12,6 @@
 //!
 //! ```
 //! use vmap::Map;
-//! use std::io::Write;
 //! use std::fs::OpenOptions;
 //! use std::path::PathBuf;
 //! use std::str::from_utf8;
@@ -31,10 +30,7 @@
 //! // Move the Map into a MapMut
 //! // ... we could have started with MapMut::with_options()
 //! let mut map = map.into_map_mut()?;
-//! {
-//!     let mut data = &mut map[..];
-//!     data.write_all(b"that")?;
-//! }
+//! map[..4].clone_from_slice(b"that");
 //!
 //! // Move the MapMut back into a Map
 //! let map = map.into_map()?;
@@ -466,7 +462,6 @@ mod sealed {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::io::Write;
     use std::path::PathBuf;
     use std::str::from_utf8;
 
@@ -504,13 +499,12 @@ mod tests {
     #[test]
     fn alloc_min() -> Result<()> {
         let sz = Size::alloc();
+
         let mut map = MapMut::with_options().len(Extent::Min(100)).alloc()?;
         assert_eq!(map.len(), sz.round(100));
         assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..5]));
-        {
-            let mut data = &mut map[..];
-            data.write_all(b"hello")?;
-        }
+
+        map[..5].clone_from_slice(b"hello");
         assert_eq!(Ok("hello"), from_utf8(&map[..5]));
         Ok(())
     }
@@ -520,10 +514,8 @@ mod tests {
         let mut map = MapMut::with_options().len(5).alloc()?;
         assert_eq!(map.len(), 5);
         assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..]));
-        {
-            let mut data = &mut map[..];
-            data.write_all(b"hello")?;
-        }
+
+        map[..5].clone_from_slice(b"hello");
         assert_eq!(Ok("hello"), from_utf8(&map[..]));
         Ok(())
     }
@@ -539,11 +531,9 @@ mod tests {
 
         assert_eq!(map.len(), 6);
         assert_eq!(Ok("\0\0\0\0\0\0"), from_utf8(&map[..]));
-        {
-            let mut data = &mut map[..];
-            // writing one more byte will segfault
-            data.write_all(b"hello")?;
-        }
+
+        // writing one more byte will segfault
+        map[..5].clone_from_slice(b"hello");
         assert_eq!(Ok("hello\0"), from_utf8(&map[..]));
         Ok(())
     }
@@ -603,10 +593,8 @@ mod tests {
             .open(&path)?;
         assert_eq!(map.len(), 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
-        {
-            let mut data = &mut map[..];
-            data.write_all(b"nice")?;
-        }
+
+        map[..4].clone_from_slice(b"nice");
         assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
         Ok(())
     }
@@ -623,12 +611,9 @@ mod tests {
         assert_eq!(Ok("this is a test\0\0"), from_utf8(&map[..]));
 
         let mut map = map.into_map_mut()?;
-        {
-            let mut data = &mut map[..];
-            data.write_all(b"that")?;
-            assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
-            assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
-        }
+        map[..4].clone_from_slice(b"that");
+        assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
+        assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
 
         let map = map.into_map()?;
         assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
