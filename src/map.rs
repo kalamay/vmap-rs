@@ -21,7 +21,6 @@ use crate::{
 /// use vmap::{Map, AdviseAccess, AdviseUsage};
 /// use std::path::PathBuf;
 /// use std::str::from_utf8;
-/// # use std::io::Write;
 ///
 /// # fn main() -> vmap::Result<()> {
 /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -38,7 +37,34 @@ use crate::{
 pub struct Map(MapMut);
 
 impl Map {
-    /// TODO
+    /// Returns a new [`Options`] object to create a read-only `Map`.
+    ///
+    /// When used to [`.open()`] a path or [`.map()`] a file, the default
+    /// [`Options`] object is assumed to cover the entire file.
+    ///
+    /// See the [`Options`] type for details on options for modifying the file
+    /// size, specifying offset positions, and selecting specific lengths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::Map;
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let map = Map::with_options()
+    ///     .offset(29)
+    ///     .len(30)
+    ///     .open(&path)?;
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map));
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn with_options() -> Options<Self> {
         Options::new()
     }
@@ -83,7 +109,6 @@ impl Map {
     /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
-    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -120,7 +145,6 @@ impl Map {
     /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
-    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -160,7 +184,6 @@ impl Map {
     ///
     /// ```
     /// use vmap::Map;
-    /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::path::PathBuf;
     /// use std::str::from_utf8;
@@ -177,10 +200,7 @@ impl Map {
     /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     ///
     /// let mut map = map.into_map_mut()?;
-    /// {
-    ///     let mut data = &mut map[..];
-    ///     data.write_all(b"that")?;
-    /// }
+    /// map[..4].clone_from_slice(b"that");
     /// assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
@@ -304,7 +324,37 @@ pub struct MapMut {
 }
 
 impl MapMut {
-    /// TODO
+    /// Returns a new `Options` object to create a writable `MapMut`.
+    ///
+    /// When used to [`.open()`] a path or [`.map()`] a file, the default
+    /// [`Options`] object is assumed to cover the entire file.
+    ///
+    /// See the [`Options`] type for details on options for modifying the file
+    /// size, specifying offset positions, and selecting specific lengths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use vmap::MapMut;
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let mut map = MapMut::with_options()
+    ///     .offset(29)
+    ///     .len(30)
+    ///     .open(&path)?;
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map));
+    /// map[..4].clone_from_slice(b"nice");
+    ///
+    /// assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map));
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn with_options() -> Options<Self> {
         let mut opts = Options::new();
         opts.write();
@@ -317,16 +367,11 @@ impl MapMut {
     ///
     /// ```
     /// use vmap::{MapMut, Protect};
-    /// use std::io::Write;
     /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// let mut map = MapMut::new(200)?;
-    /// {
-    ///     let mut data = &mut map[..];
-    ///     assert!(data.len() >= 200);
-    ///     data.write_all(b"test")?;
-    /// }
+    /// map[..4].clone_from_slice(b"test");
     /// assert_eq!(Ok("test"), from_utf8(&map[..4]));
     /// # Ok(())
     /// # }
@@ -343,7 +388,6 @@ impl MapMut {
     /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
-    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -398,7 +442,6 @@ impl MapMut {
     /// ```
     /// use vmap::MapMut;
     /// use std::path::PathBuf;
-    /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
     ///
@@ -408,13 +451,13 @@ impl MapMut {
     /// # tmp.path().join("example");
     /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
     /// let file = OpenOptions::new().read(true).open(&path)?;
+    ///
     /// let mut map = MapMut::copy(&file, 29, 30)?;
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
-    /// {
-    ///     let mut data = &mut map[..];
-    ///     data.write_all(b"nice")?;
-    /// }
+    ///
+    /// map[..4].clone_from_slice(b"nice");
+    ///
     /// assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
@@ -459,7 +502,6 @@ impl MapMut {
     ///
     /// ```
     /// use vmap::MapMut;
-    /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::path::PathBuf;
     /// use std::str::from_utf8;
@@ -472,10 +514,8 @@ impl MapMut {
     /// # fs::write(&path, b"this is a test")?;
     /// let mut map = MapMut::with_options().len(14).open(&path)?;
     /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
-    /// {
-    ///     let mut data = &mut map[..];
-    ///     data.write_all(b"that")?;
-    /// }
+    ///
+    /// map[..4].clone_from_slice(b"that");
     ///
     /// let map = map.into_map()?;
     /// assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
@@ -798,17 +838,16 @@ impl<T: FromPtr> Options<T> {
     /// ```
     /// use vmap::{Map, MapMut};
     /// use std::path::PathBuf;
-    /// use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
-    ///
     /// let mut map = MapMut::with_options().create(true).resize(100).open(&path)?;
     /// assert_eq!(100, map.len());
     /// assert_eq!(b"\0\0\0\0", &map[..4]);
-    /// map.as_mut().write_all(b"test")?;
+    ///
+    /// map[..4].clone_from_slice(b"test");
     ///
     /// let map = Map::with_options().open(&path)?;
     /// assert_eq!(100, map.len());
@@ -878,7 +917,6 @@ impl<T: FromPtr> Options<T> {
     /// ```
     /// use vmap::MapMut;
     /// use std::path::PathBuf;
-    /// use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
@@ -892,7 +930,7 @@ impl<T: FromPtr> Options<T> {
     ///         .resize(4)
     ///         .open(&path)?;
     ///     assert_eq!(b"\0\0\0\0", &map[..]);
-    ///     map.as_mut().write_all(b"test")?;
+    ///     map[..4].clone_from_slice(b"test");
     ///     assert_eq!(b"test", &map[..]);
     /// }
     ///
