@@ -55,7 +55,7 @@ impl Ring {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = Size::allocation().round(hint);
+        let len = Size::alloc().round(hint);
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,
@@ -184,7 +184,7 @@ impl InfiniteRing {
     /// occupy double the space in the virtual memory table, but the physical
     /// memory usage will remain at the desired capacity.
     pub fn new(hint: usize) -> Result<Self> {
-        let len = Size::allocation().round(hint);
+        let len = Size::alloc().round(hint);
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,

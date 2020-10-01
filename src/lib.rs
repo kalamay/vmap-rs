@@ -213,7 +213,7 @@ pub type AllocSize = Size;
 /// # Examples
 ///
 /// ```
-/// let size = vmap::Size::allocation();
+/// let size = vmap::Size::alloc();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
 ///
@@ -235,9 +235,9 @@ impl Size {
     /// The size is determined from the system's configurated allocation
     /// granularity. This value is cached making it very cheap to construct.
     #[inline]
-    #[deprecated(since = "0.4.0", note = "use Size::allocation instead")]
+    #[deprecated(since = "0.4.0", note = "use Size::alloc() instead")]
     pub fn new() -> Self {
-        Self::allocation()
+        Self::alloc()
     }
 
     /// Creates a type for calculating page numbers and byte offsets.
@@ -254,7 +254,7 @@ impl Size {
     /// The size is determined from the system's configurated allocation
     /// granularity. This value is cached making it very cheap to construct.
     #[inline]
-    pub fn allocation() -> Self {
+    pub fn alloc() -> Self {
         unsafe { Self::with_size(allocation_size()) }
     }
 
@@ -290,7 +290,7 @@ impl Size {
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = Size::allocation();
+    /// let size = Size::alloc();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -310,7 +310,7 @@ impl Size {
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = Size::allocation();
+    /// let size = Size::alloc();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -330,7 +330,7 @@ impl Size {
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = Size::allocation();
+    /// let size = Size::alloc();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
@@ -347,7 +347,7 @@ impl Size {
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = Size::allocation();
+    /// let size = Size::alloc();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
@@ -365,7 +365,7 @@ impl Size {
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
-    /// let size = Size::allocation();
+    /// let size = Size::alloc();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -392,7 +392,7 @@ impl Size {
 
 impl Default for Size {
     fn default() -> Self {
-        Self::allocation()
+        Self::alloc()
     }
 }
 
@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn alloc_min() -> Result<()> {
-        let sz = Size::allocation();
+        let sz = Size::alloc();
         let mut map = MapMut::with_options().len(Extent::Min(100)).alloc()?;
         assert_eq!(map.len(), sz.round(100));
         assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..5]));
@@ -531,7 +531,7 @@ mod tests {
     #[test]
     fn alloc_offset() -> Result<()> {
         // map to the offset of the last 5 bytes of a page, but map 6 bytes
-        let off = Size::allocation().size(1) - 5;
+        let off = Size::alloc().size(1) - 5;
         let mut map = MapMut::with_options().offset(off).len(6).alloc()?;
 
         // force the page after the 5 bytes to be read-only

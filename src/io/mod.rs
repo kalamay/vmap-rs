@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn size() {
-        let sz = Size::allocation();
+        let sz = Size::alloc();
         let mut buf = Ring::new(1000).expect("failed to create buffer");
         assert_eq!(buf.write_capacity(), sz.size(1));
         assert_eq!(buf.read_len(), 0);

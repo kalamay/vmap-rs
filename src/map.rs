@@ -612,7 +612,7 @@ impl Drop for MapMut {
     fn drop(&mut self) {
         unsafe {
             if self.len > 0 {
-                let (ptr, len) = Size::allocation().bounds(self.ptr, self.len);
+                let (ptr, len) = Size::alloc().bounds(self.ptr, self.len);
                 unmap(ptr, len).unwrap_or_default();
             }
         }
@@ -1032,7 +1032,7 @@ impl<T: FromPtr> Options<T> {
     /// let mut anon = MapMut::with_options()
     ///     .len(Extent::Min(2000))
     ///     .alloc()?;
-    /// assert_eq!(Size::allocation().size(1), anon.len());
+    /// assert_eq!(Size::alloc().size(1), anon.len());
     /// # Ok(())
     /// # }
     /// ```
@@ -1389,7 +1389,7 @@ impl<T: FromPtr> Options<T> {
             Extent::Exact(l) => l,
         };
 
-        let mapoff = Size::allocation().truncate(off);
+        let mapoff = Size::alloc().truncate(off);
         let maplen = len + (off - mapoff);
         let ptr = map_file(f, mapoff, maplen, self.protect)?;
         unsafe { Ok(Some(T::from_ptr(ptr.add(off - mapoff), len))) }
@@ -1411,8 +1411,8 @@ impl<T: FromPtr> Options<T> {
     pub fn alloc(&self) -> Result<T> {
         let off = Size::page().offset(self.offset);
         let len = match self.len {
-            Extent::End => Size::allocation().round(off) - off,
-            Extent::Min(l) => Size::allocation().round(off + l) - off,
+            Extent::End => Size::alloc().round(off) - off,
+            Extent::Min(l) => Size::alloc().round(off + l) - off,
             Extent::Max(l) | Extent::Exact(l) => l,
         };
 
