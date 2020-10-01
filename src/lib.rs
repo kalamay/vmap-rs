@@ -108,6 +108,34 @@ pub enum AdviseUsage {
     WillNotNeed,
 }
 
+/// Byte extent type used for length and resize options.
+///
+/// For usage information, see the [`.len()`] or [`.resize()`] methods of the
+/// [`Options`] builder type.
+///
+/// [`.len()`]: struct.Options.html#method.len
+/// [`.resize()`]: struct.Options.html#method.resize
+/// [`Options`]: struct.Options.html
+pub enum Extent {
+    /// A dynamic extent that implies the end byte position of an underlying
+    /// file resource or anonymous allocation.
+    End,
+    /// A static extent that referers to an exact byte position.
+    Exact(usize),
+    /// A dynamic extent that referes a byte position of at least a particular
+    /// offset.
+    Min(usize),
+    /// A dynamic extent that referes a byte position of no greater than a
+    /// particular offset.
+    Max(usize),
+}
+
+impl From<usize> for Extent {
+    fn from(v: usize) -> Self {
+        Self::Exact(v)
+    }
+}
+
 /// Gets a cached version of the system page size.
 ///
 /// # Examples
@@ -480,7 +508,7 @@ mod tests {
     #[test]
     fn alloc_min() -> Result<()> {
         let sz = Size::allocation();
-        let mut map = MapMut::with_options().len_min(100).alloc()?;
+        let mut map = MapMut::with_options().len(Extent::Min(100)).alloc()?;
         assert_eq!(map.len(), sz.round(100));
         assert_eq!(Ok("\0\0\0\0\0"), from_utf8(&map[..5]));
         {
@@ -539,7 +567,7 @@ mod tests {
         let len = fs::metadata("README.md")?.len() as usize;
         let map = Map::with_options()
             .offset(113)
-            .len_min(30)
+            .len(Extent::Min(30))
             .open("README.md")?;
         assert!(map.len() >= 30);
         assert_eq!(len - 113, map.len());
@@ -551,7 +579,7 @@ mod tests {
     fn read_max() -> Result<()> {
         let map = Map::with_options()
             .offset(113)
-            .len_max(30)
+            .len(Extent::Max(30))
             .open("README.md")?;
         assert!(map.len() == 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));

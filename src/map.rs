@@ -8,8 +8,8 @@ use std::{cmp, fmt, io};
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::{
-    AdviseAccess, AdviseUsage, ConvertResult, Error, Flush, Input, Operation, Protect, Result,
-    Size, Span, SpanMut,
+    AdviseAccess, AdviseUsage, ConvertResult, Error, Extent, Flush, Input, Operation, Protect,
+    Result, Size, Span, SpanMut,
 };
 
 mod private {
@@ -132,12 +132,12 @@ impl Map {
     /// ```
     #[deprecated(
         since = "0.4.0",
-        note = "use Map::with_options().offset(off).len_max(len).map_if(f) instead"
+        note = "use Map::with_options().offset(off).len(Extent::Max(len)).map_if(f) instead"
     )]
     pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .offset(offset)
-            .len_max(max_length)
+            .len(Extent::Max(max_length))
             .map_if(f)
     }
 
@@ -325,7 +325,7 @@ impl MapMut {
     /// # }
     /// ```
     pub fn new(hint: usize) -> Result<Self> {
-        Self::with_options().len_min(hint).alloc()
+        Self::with_options().len(Extent::Min(hint)).alloc()
     }
 
     /// Creates a new read/write map object using the full range of a file.
@@ -367,12 +367,12 @@ impl MapMut {
     /// shortened to match the file.
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().offset(off).len_max(len).map_if(f) instead"
+        note = "use MapMut::with_options().offset(off).len(Extent::Max(len)).map_if(f) instead"
     )]
     pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .offset(offset)
-            .len_max(max_length)
+            .len(Extent::Max(max_length))
             .map_if(f)
     }
 
@@ -424,13 +424,13 @@ impl MapMut {
     /// will be kept private.
     #[deprecated(
         since = "0.4.0",
-        note = "use MapMut::with_options().copy().offset(off).len_max(len).map_if(f) instead"
+        note = "use MapMut::with_options().copy().offset(off).len(Extent::Max(len)).map_if(f) instead"
     )]
     pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
         Self::with_options()
             .copy()
             .offset(offset)
-            .len_max(max_length)
+            .len(Extent::Max(max_length))
             .map_if(f)
     }
 
@@ -643,28 +643,16 @@ impl TryFrom<Map> for MapMut {
     }
 }
 
-enum Len {
-    End,
-    Exact(usize),
-    Min(usize),
-    Max(usize),
-}
-
-enum Resize {
-    None,
-    Exact(usize),
-    AtLeast(usize),
-}
-
 /// Options and flags which can be used to configure how a map is allocated.
 ///
 /// This builder exposes the ability to configure how a [`Map`] or a [`MapMut`]
 /// is allocated. These options can be used to either map a file or allocate
 /// an anonymous memory region. For file-based operations, a `std::fs::OpenOptions`
-/// value is used to convey the appropriate options when opening. This allows
-/// the creation, truncation, and resizing of the file opened for mapping. For
-/// both mapping and anonymous allocations the option can also specify an
-/// offset and a mapping length.
+/// value is maintained to match the desired abilities between the mapping and
+/// the underlying resource. This allows the creation, truncation, and resizing
+/// of a file to be coordinated when allocating a named map. For both mapping
+/// and anonymous allocations the option can also specify an offset and a
+/// mapping length.
 ///
 /// The `T` must either be a [`Map`] or a [`MapMut`]. Generally, this will be
 /// created by [`Map::with_options()`] or [`MapMut::with_options()`], then
@@ -691,8 +679,8 @@ enum Resize {
 /// [`Result`]: type.Result.html
 pub struct Options<T: FromPtr> {
     open_options: OpenOptions,
-    resize: Resize,
-    len: Len,
+    resize: Extent,
+    len: Extent,
     offset: usize,
     protect: Protect,
     truncate: bool,
@@ -713,8 +701,8 @@ impl<T: FromPtr> Options<T> {
         open_options.read(true);
         Self {
             open_options,
-            resize: Resize::None,
-            len: Len::End,
+            resize: Extent::End,
+            len: Extent::End,
             offset: 0,
             protect: Protect::ReadOnly,
             truncate: false,
@@ -869,7 +857,7 @@ impl<T: FromPtr> Options<T> {
     ///
     /// If a file is successfully opened with this option set it will truncate
     /// the file to 0 length if it already exists. Given that the file will now
-    /// be empty, a [`.resize()`] or [.resize_min()`] should be used.
+    /// be empty, a [`.resize()`] should be used.
     ///
     /// In order for the file to be truncated, [`.write()`] access must be used.
     ///
@@ -903,7 +891,6 @@ impl<T: FromPtr> Options<T> {
     /// ```
     ///
     /// [`.resize()`]: #method.resize
-    /// [`.resize_min()`]: #method.resize_min
     /// [`.write()`]: #method.write
     pub fn truncate(&mut self, truncate: bool) -> &mut Self {
         self.open_options.truncate(truncate);
@@ -941,17 +928,33 @@ impl<T: FromPtr> Options<T> {
         self
     }
 
-    /// Sets the exact byte length of the mapping.
+    /// Sets the byte length extent of the mapping.
     ///
     /// For file-based mappings, this length must be available in the
     /// underlying resource, including any [`.offset()`]. When not specified,
-    /// the length is implied to be the end of the file.
+    /// the default length is implied to be [`Extent::End`].
     ///
-    /// For anonymous mappings, it is generally necessary to apply this option
-    /// or the [`.len_min()`] or [`.len_max()`]. Without setting any, the
-    /// default length is a single allocation unit of granularity.
+    /// # Length with `Extent::End`
     ///
-    /// # Examples
+    /// With this value, the length extent is set to the end of the underlying
+    /// resource. This is the default if no `.len()` is applied, but this can
+    /// be set to override a prior setting if desired.
+    ///
+    /// For anonymous mappings, it is generally preferred to use a different
+    /// extent strategy. Without setting any other extent, the default length
+    /// is a single allocation unit of granularity.
+    ///
+    /// # Length with `Extent::Exact`
+    ///
+    /// Using an exact extent option will instruct the map to cover an exact
+    /// byte length. That is, it will not consider the length of the underlying
+    /// resource, if any. For file-based mappings, this length must be
+    /// available in the file. For anonymous mappings, this is the minimum size
+    /// that will be allocated, however, the resulting map will be sized
+    /// exactly to this size.
+    ///
+    /// A `usize` may be used as an [`Extent::Exact`] through the `usize`
+    /// implementation of [`Into<Extent>`].
     ///
     /// ```
     /// use vmap::{Map, MapMut};
@@ -965,41 +968,31 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options().len(4).open(&path)?;
+    /// let map = Map::with_options()
+    ///     .len(4) // or .len(Extent::Exaxt(4))
+    ///     .open(&path)?;
     /// assert_eq!(Ok("this"), from_utf8(&map[..]));
     ///
-    /// let mut anon = MapMut::with_options().len(4).alloc()?;
+    /// let mut anon = MapMut::with_options()
+    ///     .len(4)
+    ///     .alloc()?;
     /// assert_eq!(4, anon.len());
     /// # Ok(())
     /// # }
     /// ```
     ///
-    /// [`.offset()`]: #method.offset
-    /// [`.len_min()`]: #method.len_min
-    /// [`.len_max()`]: #method.len_max
-    pub fn len(&mut self, len: usize) -> &mut Self {
-        self.len = Len::Exact(len);
-        self
-    }
-
-    /// Sets the minimum byte length of the mapping.
+    /// # Length with `Extent::Min`
     ///
-    /// For file-based mappings, this length must be available in the
-    /// underlying resource, including any [`.offset()`]. Similar to when no
-    /// length is specified, the resulting length will cover the end of the
-    /// file. Unlike the default, however, this ensures a minimum length is
-    /// available.
-    ///
-    /// For anonymous mappings, it is generally necessary to apply this option
-    /// or the [`.len()`] or [`.len_max()`]. Using `.len_min()` ensures that
-    /// the memory region has a minumum size. The actual size will continue to
-    /// the end of the allocation unit granulariry. Without setting any, the
-    /// default length is a single allocation unit of granularity.
-    ///
-    /// # Examples
+    /// The minimum extent strategy creates a mapping that is at least the
+    /// desired byte length, but may be larger. When applied to a file-based
+    /// mapping, this ensures that the resulting memory region covers a minimum
+    /// extent, but otherwise covers to the end of the file. For an anonymous
+    /// map, this ensures the allocated region meets the minimum size required,
+    /// but allows accessing the remaining allocated space that would otherwise
+    /// be unusable.
     ///
     /// ```
-    /// use vmap::{Map, MapMut, Size};
+    /// use vmap::{Extent, Map, MapMut, Size};
     /// use std::path::PathBuf;
     /// use std::str::from_utf8;
     /// use std::fs;
@@ -1010,39 +1003,36 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options().offset(5).len_min(4).open(&path)?;
+    /// let map = Map::with_options()
+    ///     .offset(5)
+    ///     .len(Extent::Min(4))
+    ///     .open(&path)?;
     /// assert_eq!(9, map.len());
     /// assert_eq!(Ok("is a test"), from_utf8(&map[..]));
-    /// assert!(Map::with_options().len_min(100).open_if(&path)?.is_none());
     ///
-    /// let mut anon = MapMut::with_options().len_min(2000).alloc()?;
+    /// assert!(
+    ///     Map::with_options()
+    ///         .len(Extent::Min(100))
+    ///         .open_if(&path)?
+    ///         .is_none()
+    /// );
+    ///
+    /// let mut anon = MapMut::with_options()
+    ///     .len(Extent::Min(2000))
+    ///     .alloc()?;
     /// assert_eq!(Size::allocation().size(1), anon.len());
     /// # Ok(())
     /// # }
     /// ```
     ///
-    /// [`.offset()`]: #method.offset
-    /// [`.len()`]: #method.len
-    /// [`.len_max()`]: #method.len_max
-    pub fn len_min(&mut self, len_min: usize) -> &mut Self {
-        self.len = Len::Min(len_min);
-        self
-    }
-
-    /// Sets the maximum byte length of the mapping.
+    /// # Length with `Extent::Max`
     ///
-    /// For file-based mappings, unlike [`.len()`] or [`.len_min()`]. this
-    /// length need not be available in the underlying resource. If the length
-    /// requested exceeds the size of the file, the mapped region will be
-    /// decreased to match the end of the file. The [`.offset()`] is still
-    /// required to be within the resource's size bounds however.
-    ///
-    /// For anonymous mappings, this is equivalent to using [`.len()`].
-    ///
-    /// # Examples
+    /// The maximum extent strategy creates a mapping that is no larger than
+    /// the desired byte length, but may be smaller. When applied to a file-
+    /// based mapping, this will ensure that the resulting
     ///
     /// ```
-    /// use vmap::{Map, MapMut};
+    /// use vmap::{Extent, Map, MapMut};
     /// use std::path::PathBuf;
     /// use std::str::from_utf8;
     /// use std::fs;
@@ -1053,35 +1043,61 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options().offset(5).len_max(100).open(&path)?;
+    /// let map = Map::with_options()
+    ///    .offset(5)
+    ///    .len(Extent::Max(100))
+    ///    .open(&path)?;
     /// assert_eq!(9, map.len());
     /// assert_eq!(Ok("is a test"), from_utf8(&map[..]));
     ///
-    /// let mut anon = MapMut::with_options().len_max(2000).alloc()?;
+    /// let mut anon = MapMut::with_options()
+    ///     .len(Extent::Max(2000))
+    ///     .alloc()?;
     /// assert_eq!(2000, anon.len());
     /// # Ok(())
     /// # }
     /// ```
     ///
+    /// [`Into<Extent>`]: enum.Extent.html#impl-From<usize>
+    /// [`Extent::End`]: enum.Extent.html#variant.End
+    /// [`Extent::Exact`]: enum.Extent.html#variant.Exact
+    /// [`Extent::Min`]: enum.Extent.html#variant.Min
+    /// [`Extent::Max`]: enum.Extent.html#variant.Max
     /// [`.offset()`]: #method.offset
-    /// [`.len()`]: #method.len
     /// [`.len_min()`]: #method.len_min
-    pub fn len_max(&mut self, len_max: usize) -> &mut Self {
-        self.len = Len::Max(len_max);
+    /// [`.len_max()`]: #method.len_max
+    pub fn len<E: Into<Extent>>(&mut self, value: E) -> &mut Self {
+        self.len = value.into();
         self
     }
 
-    /// Sets the option to resize the file to an exact length.
+    /// Sets the option to resize the file prior to mapping.
     ///
     /// When mapping to a file using [`.open()`], [`.open_if()`], [`.map()`],
-    /// or [`.map_if()`] this options sets the length of the underlying
-    /// resource to an explicit size by calling [`.set_len()`] on the [`File`].
+    /// or [`.map_if()`] this options conditionally adjusts the length of the
+    /// underlying resource to the desired size by calling [`.set_len()`] on
+    /// the [`File`].
     ///
     /// In order for the file to be resized, [`.write()`] access must be used.
     ///
     /// This has no affect on anonymous mappings.
     ///
-    /// # Examples
+    /// # Resize with `Extent::End`
+    ///
+    /// This implies resizing to the current size of the file. In other words,
+    /// no resize is performed, and this is the default strategy.
+    ///
+    /// # Resize with `Extent::Exact`
+    ///
+    /// Using an exact extent option will instruct the map to cover an exact
+    /// byte length. That is, it will not consider the length of the underlying
+    /// resource, if any. For file-based mappings, this length must be
+    /// available in the file. For anonymous mappings, this is the minimum size
+    /// that will be allocated, however, the resulting map will be sized
+    /// exactly to this size.
+    ///
+    /// A `usize` may be used as an [`Extent::Exact`] through the `usize`
+    /// implementation of [`Into<Extent>`].
     ///
     /// ```
     /// use vmap::Map;
@@ -1095,7 +1111,85 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options().write().resize(7).open(&path)?;
+    /// let map = Map::with_options()
+    ///     .write()
+    ///     .resize(7) // or .resize(Extent::Exact(7))
+    ///     .open(&path)?;
+    /// assert_eq!(7, map.len());
+    /// assert_eq!(Ok("this is"), from_utf8(&map[..]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Resize with `Extent::Min`
+    ///
+    /// The minimum extent strategy resizes the file to be at least the
+    /// desired byte length, but may be larger. If the file is already equal
+    /// to or larger than the extent, no resize is performed.
+    ///
+    /// ```
+    /// use vmap::{Extent, Map};
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    /// use std::fs;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    ///
+    /// fs::write(&path, b"this")?;
+    ///
+    /// let map = Map::with_options()
+    ///     .write()
+    ///     .resize(Extent::Min(7))
+    ///     .open(&path)?;
+    /// assert_eq!(7, map.len());
+    /// assert_eq!(Ok("this\0\0\0"), from_utf8(&map[..]));
+    ///
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// let map = Map::with_options()
+    ///     .write()
+    ///     .resize(Extent::Min(7))
+    ///     .open(&path)?;
+    /// assert_eq!(14, map.len());
+    /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Resize with `Extent::Max`
+    ///
+    /// The maximum extent strategy resizes the file to be no larger than the
+    /// desired byte length, but may be smaller. If the file is already equal
+    /// to or smaller than the extent, no resize is performed.
+    ///
+    /// ```
+    /// use vmap::{Extent, Map};
+    /// use std::path::PathBuf;
+    /// use std::str::from_utf8;
+    /// use std::fs;
+    ///
+    /// # fn main() -> vmap::Result<()> {
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// fs::write(&path, b"this")?;
+    ///
+    /// let map = Map::with_options()
+    ///     .write()
+    ///     .resize(Extent::Max(7))
+    ///     .open(&path)?;
+    /// assert_eq!(4, map.len());
+    /// assert_eq!(Ok("this"), from_utf8(&map[..]));
+    ///
+    /// fs::write(&path, b"this is a test")?;
+    ///
+    /// let map = Map::with_options()
+    ///     .write()
+    ///     .resize(Extent::Max(7))
+    ///     .open(&path)?;
     /// assert_eq!(7, map.len());
     /// assert_eq!(Ok("this is"), from_utf8(&map[..]));
     /// # Ok(())
@@ -1109,52 +1203,13 @@ impl<T: FromPtr> Options<T> {
     /// [`.set_len()`]: https://doc.rust-lang.org/std/fs/struct.File.html#method.set_len
     /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
     /// [`.write()`]: #method.write
-    pub fn resize(&mut self, resize: usize) -> &mut Self {
-        self.resize = Resize::Exact(resize);
-        self
-    }
-
-    /// Sets the option to resize the file to a minimum length.
-    ///
-    /// When mapping to a file using [`.open()`], [`.open_if()`], [`.map()`],
-    /// or [`.map_if()`] this options increases the length of the underlying
-    /// resource to the provided size by calling [`.set_len()`] on the [`File`]
-    /// if the length is less the required size.
-    ///
-    /// In order for the file to be resized, [`.write()`] access must be used.
-    ///
-    /// This has no affect on anonymous mappings.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vmap::Map;
-    /// use std::path::PathBuf;
-    /// use std::str::from_utf8;
-    /// use std::fs;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// fs::write(&path, b"this is a test")?;
-    ///
-    /// let map = Map::with_options().write().resize_min(7).open(&path)?;
-    /// assert_eq!(14, map.len());
-    /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// [`.open()`]: #method.open
-    /// [`.open_if()`]: #method.open_if
-    /// [`.map()`]: #method.map
-    /// [`.map_if()`]: #method.map_if
-    /// [`.set_len()`]: https://doc.rust-lang.org/std/fs/struct.File.html#method.set_len
-    /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
-    /// [`.write()`]: #method.write
-    pub fn resize_min(&mut self, resize_min: usize) -> &mut Self {
-        self.resize = Resize::AtLeast(resize_min);
+    /// [`Into<Extent>`]: enum.Extent.html#impl-From<usize>
+    /// [`Extent::End`]: enum.Extent.html#variant.End
+    /// [`Extent::Exact`]: enum.Extent.html#variant.Exact
+    /// [`Extent::Min`]: enum.Extent.html#variant.Min
+    /// [`Extent::Max`]: enum.Extent.html#variant.Max
+    pub fn resize<E: Into<Extent>>(&mut self, value: E) -> &mut Self {
+        self.resize = value.into();
         self
     }
 
@@ -1300,8 +1355,9 @@ impl<T: FromPtr> Options<T> {
         }
 
         let flen = match self.resize {
-            Resize::Exact(sz) => resize(sz)?,
-            Resize::AtLeast(sz) if sz as u64 > md.len() => resize(sz)?,
+            Extent::Min(sz) if (sz as u64) > md.len() => resize(sz)?,
+            Extent::Max(sz) if (sz as u64) < md.len() => resize(sz)?,
+            Extent::Exact(sz) => resize(sz)?,
             _ => md.len() as usize,
         };
 
@@ -1311,10 +1367,10 @@ impl<T: FromPtr> Options<T> {
 
         let max = flen - off;
         let len = match self.len {
-            Len::Min(l) | Len::Exact(l) if l > max => return Ok(None),
-            Len::Min(_) | Len::End => max,
-            Len::Max(l) => cmp::min(l, max),
-            Len::Exact(l) => l,
+            Extent::Min(l) | Extent::Exact(l) if l > max => return Ok(None),
+            Extent::Min(_) | Extent::End => max,
+            Extent::Max(l) => cmp::min(l, max),
+            Extent::Exact(l) => l,
         };
 
         let mapoff = Size::allocation().truncate(off);
@@ -1328,10 +1384,10 @@ impl<T: FromPtr> Options<T> {
     /// # Examples
     ///
     /// ```
-    /// use vmap::MapMut;
+    /// use vmap::{Extent, MapMut};
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let map = MapMut::with_options().len_min(500).alloc()?;
+    /// let map = MapMut::with_options().len(Extent::Min(500)).alloc()?;
     /// assert!(map.len() >= 500);
     /// # Ok(())
     /// # }
@@ -1339,13 +1395,19 @@ impl<T: FromPtr> Options<T> {
     pub fn alloc(&self) -> Result<T> {
         let off = Size::page().offset(self.offset);
         let len = match self.len {
-            Len::End => Size::allocation().round(off) - off,
-            Len::Min(l) => Size::allocation().round(off + l) - off,
-            Len::Max(l) | Len::Exact(l) => l,
+            Extent::End => Size::allocation().round(off) - off,
+            Extent::Min(l) => Size::allocation().round(off + l) - off,
+            Extent::Max(l) | Extent::Exact(l) => l,
         };
 
         let ptr = map_anon(off + len, self.protect)?;
         unsafe { Ok(T::from_ptr(ptr.add(off), len)) }
+    }
+}
+
+impl<T: FromPtr> Default for Options<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
