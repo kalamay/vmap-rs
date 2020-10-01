@@ -20,8 +20,6 @@ use std::io::{self, BufRead, Read, Write};
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
 /// use vmap::io::{Ring, SeqWrite};
 /// use std::io::{BufRead, Read, Write};
 ///
@@ -144,8 +142,6 @@ impl Write for Ring {
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
 /// use vmap::io::{InfiniteRing, SeqRead, SeqWrite};
 /// use std::io::{BufRead, Read, Write};
 ///

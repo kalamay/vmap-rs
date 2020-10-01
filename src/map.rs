@@ -18,13 +18,17 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// use vmap::{Map, AdviseAccess, AdviseUsage};
-/// use std::fs::OpenOptions;
+/// use std::path::PathBuf;
 /// use std::str::from_utf8;
+/// # use std::io::Write;
 ///
 /// # fn main() -> vmap::Result<()> {
-/// let page = Map::with_options().offset(113).len(30).open("README.md")?;
+/// # let tmp = tempdir::TempDir::new("vmap")?;
+/// let path: PathBuf = /* path to file */
+/// # tmp.path().join("example");
+/// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+/// let page = Map::with_options().offset(29).len(30).open(&path)?;
 /// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
 /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&page[..]));
 /// assert_eq!(Ok("safe"), from_utf8(&page[9..13]));
@@ -47,15 +51,18 @@ impl Map {
     ///
     /// # Examples
     /// ```
-    /// # extern crate vmap;
     /// use vmap::Map;
-    /// use std::fs::OpenOptions;
+    /// use std::path::PathBuf;
     /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let map = Map::open("README.md")?;
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let map = Map::open(&path)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
     ///
     /// // The file handle is read-only.
     /// assert!(map.into_map_mut().is_err());
@@ -72,16 +79,21 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::Map;
+    /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
+    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let file = OpenOptions::new().read(true).open("README.md")?;
-    /// let map = Map::file(&file, 0, 143)?;
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let file = OpenOptions::new().read(true).open(&path)?;
+    /// let map = Map::file(&file, 29, 30)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
     ///
     /// let map = Map::file(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(map.is_err());
@@ -104,16 +116,21 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::Map;
+    /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
+    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let file = OpenOptions::new().read(true).open("README.md")?;
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let file = OpenOptions::new().read(true).open(&path)?;
     /// let map = Map::file_max(&file, 0, 5000)?.expect("should be valid range");
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
     ///
     /// let map = Map::file_max(&file, 0, file.metadata()?.len() as usize + 1);
     /// assert!(!map.is_err());
@@ -142,8 +159,6 @@ impl Map {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
-    /// # extern crate tempdir;
     /// use vmap::Map;
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
@@ -301,7 +316,6 @@ impl MapMut {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::{MapMut, Protect};
     /// use std::io::Write;
     /// use std::str::from_utf8;
@@ -325,15 +339,20 @@ impl MapMut {
     ///
     /// # Examples
     /// ```
-    /// # extern crate vmap;
     /// use vmap::MapMut;
+    /// use std::path::PathBuf;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
+    /// # use std::io::Write;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let map = MapMut::open("README.md")?;
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let map = MapMut::open(&path)?;
     /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[113..143]));
+    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
     /// # Ok(())
     /// # }
     /// ```
@@ -377,15 +396,19 @@ impl MapMut {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::MapMut;
+    /// use std::path::PathBuf;
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
     /// use std::str::from_utf8;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let file = OpenOptions::new().read(true).open("README.md")?;
-    /// let mut map = MapMut::copy(&file, 113, 30)?;
+    /// # let tmp = tempdir::TempDir::new("vmap")?;
+    /// let path: PathBuf = /* path to file */
+    /// # tmp.path().join("example");
+    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
+    /// let file = OpenOptions::new().read(true).open(&path)?;
+    /// let mut map = MapMut::copy(&file, 29, 30)?;
     /// assert_eq!(map.is_empty(), false);
     /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
     /// {
@@ -435,8 +458,6 @@ impl MapMut {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
-    /// # extern crate tempdir;
     /// use vmap::MapMut;
     /// use std::io::Write;
     /// use std::fs::OpenOptions;
@@ -712,7 +733,6 @@ impl<T: FromPtr> Options<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::Map;
     ///
     /// # fn main() -> vmap::Result<()> {
@@ -745,7 +765,6 @@ impl<T: FromPtr> Options<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::MapMut;
     ///
     /// # fn main() -> vmap::Result<()> {

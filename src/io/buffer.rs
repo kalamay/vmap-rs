@@ -12,8 +12,6 @@ use std::io::{self, BufRead, ErrorKind, Read, Write};
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
 /// use vmap::io::BufReader;
 /// # use std::io::prelude::*;
 /// # use std::net::{TcpListener, TcpStream};
@@ -118,8 +116,6 @@ impl<R: Read> BufRead for BufReader<R> {
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
-/// #
 /// use vmap::io::{BufReader, BufWriter};
 /// # use std::io::prelude::*;
 /// # use std::net::{TcpListener, TcpStream};

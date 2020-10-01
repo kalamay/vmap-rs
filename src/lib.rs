@@ -11,9 +11,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate vmap;
-//! # extern crate tempdir;
-//! #
 //! use vmap::Map;
 //! use std::io::Write;
 //! use std::fs::OpenOptions;
@@ -141,7 +138,6 @@ impl From<usize> for Extent {
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// let page_size = vmap::page_size();
 /// println!("the system page size is {} bytes", page_size);
 /// assert!(page_size >= 4096);
@@ -163,7 +159,6 @@ pub fn page_size() -> usize {
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// let alloc_size = vmap::allocation_size();
 /// println!("the system allocation granularity is {} bytes", alloc_size);
 /// if cfg!(windows) {
@@ -197,7 +192,6 @@ fn load_system_info() -> (u32, u32) {
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// let size = vmap::AllocSize::new();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
@@ -219,7 +213,6 @@ pub type AllocSize = Size;
 /// # Examples
 ///
 /// ```
-/// # extern crate vmap;
 /// let size = vmap::Size::allocation();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
@@ -278,7 +271,6 @@ impl Size {
     /// # Examples
     ///
     /// ```
-    /// # extern crate vmap;
     /// use vmap::Size;
     ///
     /// let sys = vmap::allocation_size();
@@ -558,41 +550,44 @@ mod tests {
 
     #[test]
     fn read_end() -> Result<()> {
-        let len = fs::metadata("README.md")?.len() as usize;
-        let map = Map::with_options().offset(113).open("README.md")?;
+        let (_tmp, path, len) = write_default("read_end")?;
+        let map = Map::with_options().offset(29).open(&path)?;
         assert!(map.len() >= 30);
-        assert_eq!(len - 113, map.len());
+        assert_eq!(len - 29, map.len());
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
         Ok(())
     }
 
     #[test]
     fn read_min() -> Result<()> {
-        let len = fs::metadata("README.md")?.len() as usize;
+        let (_tmp, path, len) = write_default("read_min")?;
         let map = Map::with_options()
-            .offset(113)
+            .offset(29)
             .len(Extent::Min(30))
-            .open("README.md")?;
+            .open(&path)?;
+        println!("path = {:?}, len = {}, map = {}", path, len, map.len());
         assert!(map.len() >= 30);
-        assert_eq!(len - 113, map.len());
+        assert_eq!(len - 29, map.len());
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
         Ok(())
     }
 
     #[test]
     fn read_max() -> Result<()> {
+        let (_tmp, path, _len) = write_default("read_max")?;
         let map = Map::with_options()
-            .offset(113)
+            .offset(29)
             .len(Extent::Max(30))
-            .open("README.md")?;
+            .open(&path)?;
         assert!(map.len() == 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
         Ok(())
     }
 
     #[test]
-    fn read_exaxt() -> Result<()> {
-        let map = Map::with_options().offset(113).len(30).open("README.md")?;
+    fn read_exact() -> Result<()> {
+        let (_tmp, path, _len) = write_default("read_exact")?;
+        let map = Map::with_options().offset(29).len(30).open(&path)?;
         assert!(map.len() == 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
         Ok(())
@@ -600,11 +595,12 @@ mod tests {
 
     #[test]
     fn copy() -> Result<()> {
+        let (_tmp, path, _len) = write_default("copy")?;
         let mut map = MapMut::with_options()
-            .offset(113)
+            .offset(29)
             .len(30)
             .copy()
-            .open("README.md")?;
+            .open(&path)?;
         assert_eq!(map.len(), 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
         {
@@ -660,5 +656,21 @@ mod tests {
         assert_eq!(16, map.len());
         assert_eq!(Ok("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"), from_utf8(&map[..]));
         Ok(())
+    }
+
+    type WriteResult = Result<(tempdir::TempDir, PathBuf, usize)>;
+
+    fn write_tmp(name: &'static str, msg: &'static str) -> WriteResult {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join(name);
+        fs::write(&path, msg)?;
+        Ok((tmp, path, msg.len()))
+    }
+
+    fn write_default(name: &'static str) -> WriteResult {
+        write_tmp(
+            name,
+            "A cross-platform library for fast and safe memory-mapped IO in Rust",
+        )
     }
 }
