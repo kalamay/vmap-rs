@@ -1343,19 +1343,19 @@ impl<T: FromPtr> Options<T> {
     /// [`.map()`]: #method.map
     pub fn map_if(&self, f: &File) -> Result<Option<T>> {
         let off = self.offset;
-        let md = f.metadata().map_err(map_file_err)?;
+        let mut flen = f.metadata().map_err(map_file_err)?.len() as usize;
 
         let resize = |sz: usize| f.set_len(sz as u64).map(|_| sz).map_err(map_file_err);
 
-        if self.truncate && md.len() > 0 {
-            resize(0)?;
+        if self.truncate && flen > 0 {
+            flen = resize(0)?;
         }
 
-        let flen = match self.resize {
-            Extent::Min(sz) if (sz as u64) > md.len() => resize(sz)?,
-            Extent::Max(sz) if (sz as u64) < md.len() => resize(sz)?,
+        flen = match self.resize {
             Extent::Exact(sz) => resize(sz)?,
-            _ => md.len() as usize,
+            Extent::Min(sz) if sz > flen => resize(sz)?,
+            Extent::Max(sz) if sz < flen => resize(sz)?,
+            _ => flen,
         };
 
         if flen < off {
