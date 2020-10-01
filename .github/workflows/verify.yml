@@ -1,17 +1,11 @@
-# Based on https://github.com/actions-rs/meta/blob/master/recipes/quickstart.md
-#
-# While our "example" application has the platform-specific code,
-# for simplicity we are compiling and testing everything on the Ubuntu environment only.
-# For multi-OS testing see the `cross.yml` workflow.
-
 on: [push]
 
 name: Verify
 
 jobs:
-  test:
-    name: Test Suite
-    runs-on: [ubuntu-latest, windows-latest, macos-latest]
+  test_linux: &base
+    name: Test Linux
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
@@ -27,3 +21,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+
+  test_windows:
+    <<: *base
+    name: Test Windows
+    runs-on: windows-latest
+
+  test_macos:
+    <<: *base
+    name: Test MacOS
+    runs-on: macos-latest
