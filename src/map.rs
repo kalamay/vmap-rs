@@ -7,18 +7,11 @@ use std::slice;
 use std::{cmp, fmt, io};
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
+use crate::sealed::FromPtr;
 use crate::{
     AdviseAccess, AdviseUsage, ConvertResult, Error, Extent, Flush, Input, Operation, Protect,
     Result, Size, Span, SpanMut,
 };
-
-mod private {
-    pub trait FromPtr {
-        unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self;
-    }
-}
-
-use private::FromPtr;
 
 /// Allocation of one or more read-only sequential pages.
 ///

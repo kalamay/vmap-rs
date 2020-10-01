@@ -406,7 +406,7 @@ impl Default for Size {
 
 /// General trait for working with any memory-safe representation of a
 /// contiguous region of arbitrary memory.
-pub trait Span: Deref<Target = [u8]> + Sized + sealed::Sealed {
+pub trait Span: Deref<Target = [u8]> + Sized + sealed::Span {
     /// Get the length of the allocated region.
     fn len(&self) -> usize;
 
@@ -459,12 +459,16 @@ impl<'a> SpanMut for &'a mut [u8] {
 }
 
 mod sealed {
-    pub trait Sealed {}
+    pub trait Span {}
 
-    impl Sealed for crate::Map {}
-    impl Sealed for crate::MapMut {}
-    impl<'a> Sealed for &'a [u8] {}
-    impl<'a> Sealed for &'a mut [u8] {}
+    impl Span for super::Map {}
+    impl Span for super::MapMut {}
+    impl<'a> Span for &'a [u8] {}
+    impl<'a> Span for &'a mut [u8] {}
+
+    pub trait FromPtr {
+        unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self;
+    }
 }
 
 #[cfg(test)]
