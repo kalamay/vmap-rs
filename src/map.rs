@@ -1133,12 +1133,14 @@ impl<T: FromPtr> Options<T> {
     ///
     /// fs::write(&path, b"this")?;
     ///
-    /// let map = Map::with_options()
-    ///     .write()
-    ///     .resize(Extent::Min(7))
-    ///     .open(&path)?;
-    /// assert_eq!(7, map.len());
-    /// assert_eq!(Ok("this\0\0\0"), from_utf8(&map[..]));
+    /// {
+    ///     let map = Map::with_options()
+    ///         .write()
+    ///         .resize(Extent::Min(7))
+    ///         .open(&path)?;
+    ///     assert_eq!(7, map.len());
+    ///     assert_eq!(Ok("this\0\0\0"), from_utf8(&map[..]));
+    /// }
     ///
     /// fs::write(&path, b"this is a test")?;
     ///
@@ -1170,12 +1172,14 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this")?;
     ///
-    /// let map = Map::with_options()
-    ///     .write()
-    ///     .resize(Extent::Max(7))
-    ///     .open(&path)?;
-    /// assert_eq!(4, map.len());
-    /// assert_eq!(Ok("this"), from_utf8(&map[..]));
+    /// {
+    ///     let map = Map::with_options()
+    ///         .write()
+    ///         .resize(Extent::Max(7))
+    ///         .open(&path)?;
+    ///     assert_eq!(4, map.len());
+    ///     assert_eq!(Ok("this"), from_utf8(&map[..]));
+    /// }
     ///
     /// fs::write(&path, b"this is a test")?;
     ///
