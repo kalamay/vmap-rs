@@ -54,9 +54,6 @@ pub use self::map::{Map, MapMut, Options};
 
 pub mod io;
 
-/// Type to represent whole page offsets and counts.
-pub type Pgno = u32;
-
 /// Protection level for a page.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Protect {
@@ -254,8 +251,8 @@ impl Size {
         unsafe { Self::with_size(allocation_size()) }
     }
 
-    /// Creates a type for calculating page numbers and byte offsets using a
-    /// known page size.
+    /// Creates a type for calculating allocations numbers and byte offsets
+    /// using a known size.
     ///
     /// # Safety
     ///
@@ -278,15 +275,15 @@ impl Size {
         Size(size)
     }
 
-    /// Round a byte size up to the nearest page size.
+    /// Round a byte size up to the nearest unit size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -298,15 +295,15 @@ impl Size {
         self.truncate(len + self.0 - 1)
     }
 
-    /// Round a byte size down to the nearest page size.
+    /// Round a byte size down to the nearest unit size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -318,50 +315,51 @@ impl Size {
         len & !(self.0 - 1)
     }
 
-    /// Calculate the byte offset from page containing the position.
+    /// Calculate the byte offset from size unit containing the position.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
     /// ```
+    #[inline]
     pub fn offset(&self, len: usize) -> usize {
         len & (self.0 - 1)
     }
 
-    /// Convert a page count into a byte size.
+    /// Convert a unit count into a byte size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn size(&self, count: Pgno) -> usize {
+    pub fn size(&self, count: u32) -> usize {
         (count as usize) << self.0.trailing_zeros()
     }
 
-    /// Covert a byte size into the number of pages necessary to contain it.
+    /// Covert a byte size into the number of units necessary to contain it.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -370,16 +368,17 @@ impl Size {
     /// assert_eq!(size.count(sys*2), 2);
     /// ```
     #[inline]
-    pub fn count(&self, len: usize) -> Pgno {
-        (self.round(len) >> self.0.trailing_zeros()) as Pgno
+    pub fn count(&self, len: usize) -> u32 {
+        (self.round(len) >> self.0.trailing_zeros()) as u32
     }
 
-    /// Calculates the page bounds for a pointer and length.
+    /// Calculates the unit bounds for a pointer and length.
     ///
     /// # Safety
     ///
     /// There is no verification that the pointer is a mapped page nor that
     /// the calculated offset may be dereferenced.
+    #[inline]
     pub unsafe fn bounds(&self, ptr: *mut u8, len: usize) -> (*mut u8, usize) {
         let off = self.offset(ptr as usize);
         (ptr.offset(-(off as isize)), self.round(len + off))
@@ -522,7 +521,7 @@ mod tests {
 
     #[test]
     fn alloc_offset() -> Result<()> {
-        // map to the offset of the last 5 bytes of a page, but map 6 bytes
+        // map to the offset of the last 5 bytes of an allocation size, but map 6 bytes
         let off = Size::alloc().size(1) - 5;
         let mut map = MapMut::with_options().offset(off).len(6).alloc()?;
 

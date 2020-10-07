@@ -1467,7 +1467,7 @@ impl<T: FromPtr> Options<T> {
     pub fn alloc(&self) -> Result<T> {
         let off = Size::page().offset(self.offset);
         let len = match self.len {
-            Extent::End => Size::alloc().round(off) - off,
+            Extent::End => Size::alloc().round(off + 1) - off,
             Extent::Min(l) => Size::alloc().round(off + l) - off,
             Extent::Max(l) | Extent::Exact(l) => l,
         };
