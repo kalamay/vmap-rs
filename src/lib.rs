@@ -3,16 +3,58 @@
 //! This library defines a convenient API for reading and writing to files
 //! using the hosts virtual memory system. The design of the API strives to
 //! both minimize the frequency of mapping system calls while still retaining
-//! safe access.
+//! safe access. Critically, it never attempts the own the `File` object used
+//! for mapping. That is, it never clones it or in any way retains it. While
+//! this has some implications for the API (i.e. [`.flush()`]), it cannot cause
+//! bugs outside of this library through `File`'s leaky abstraction when cloned
+//! and then closed.
+//!
+//! The [`Map`] and [`MapMut`] types are primary means for allocating virtual
+//! memory regions, both for a file and anonymously. Generally, the
+//! [`Map::with_options()`] and [`MapMut::with_options()`] are used to specify
+//! the mapping requirements. See [`Options`] for more information.
+//!
+//! The [`MapMut`] type maintains interior mutability for the mapped memory,
+//! while the [`Map`] is read-only. However, it is possible to convert between
+//! these types ([`.into_map_mut()`] and [`.into_map()`]) assuming the proper
+//! [`Options`] are specified.
 //!
 //! Additionally, a variety of buffer implementations are provided in the
-//! [`vmap::io`](io/index.html) module.
+//! [`vmap::io`] module. The [`Ring`] and [`InfiniteRing`] use circular memory
+//! address allocations using cross-platform optimizations to minimize excess
+//! resources where possible. The [`BufReader`] and [`BufWriter`] implement
+//! buffered I/O using a [`Ring`] as a backing layer.
 //!
 //! # Examples
 //!
 //! ```
 //! use vmap::Map;
-//! use std::fs::OpenOptions;
+//! use std::path::PathBuf;
+//! use std::str::from_utf8;
+//! # use std::fs;
+//!
+//! # fn main() -> vmap::Result<()> {
+//! # let tmp = tempdir::TempDir::new("vmap")?;
+//! let path: PathBuf = /* path to file */
+//! # tmp.path().join("example");
+//! # fs::write(&path, b"this is a test")?;
+//!
+//! // Map the first 4 bytes
+//! let (map, file) = Map::with_options().len(4).open(&path)?;
+//! assert_eq!(Ok("this"), from_utf8(&map[..]));
+//!
+//! // Reuse the file to map a different region
+//! let map = Map::with_options().offset(10).len(4).map(&file)?;
+//! assert_eq!(Ok("test"), from_utf8(&map[..]));
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! If opened properly, the `Map` can be moved into a `MapMut` and modifications
+//! to the underlying file can be performed:
+//!
+//! ```
+//! use vmap::{Map, Flush};
 //! use std::path::PathBuf;
 //! use std::str::from_utf8;
 //! # use std::fs;
@@ -24,7 +66,7 @@
 //! # fs::write(&path, b"this is a test")?;
 //!
 //! // Open with write permissions so the Map can be converted into a MapMut
-//! let map = Map::with_options().write().len(14).open(&path)?;
+//! let (map, file) = Map::with_options().write().len(14).open(&path)?;
 //! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
@@ -32,19 +74,80 @@
 //! let mut map = map.into_map_mut()?;
 //! map[..4].clone_from_slice(b"that");
 //!
+//! // Flush the changes to disk synchronously
+//! map.flush(&file, Flush::Sync)?;
+//!
 //! // Move the MapMut back into a Map
 //! let map = map.into_map()?;
 //! assert_eq!(Ok("that is a test"), from_utf8(&map[..]));
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! This library contains a [`Ring`] that constructs a circular memory
+//! allocation where values can wrap from around from the end of the buffer back
+//! to the beginning with sequential memory addresses. The [`InfiniteRing`] is
+//! similar, however it allows writes to overwrite reads.
+//!
+//! ```
+//! use vmap::io::{Ring, SeqWrite};
+//! use std::io::{BufRead, Read, Write};
+//!
+//! # fn main() -> std::io::Result<()> {
+//! let mut buf = Ring::new(4000).unwrap();
+//! let mut i = 1;
+//!
+//! // Fill up the buffer with lines.
+//! while buf.write_len() > 20 {
+//!     write!(&mut buf, "this is test line {}\n", i)?;
+//!     i += 1;
+//! }
+//!
+//! // No more space is available.
+//! assert!(write!(&mut buf, "this is test line {}\n", i).is_err());
+//!
+//! let mut line = String::new();
+//!
+//! // Read the first line written.
+//! let len = buf.read_line(&mut line)?;
+//! assert_eq!(line, "this is test line 1\n");
+//!
+//! line.clear();
+//!
+//! // Read the second line written.
+//! let len = buf.read_line(&mut line)?;
+//! assert_eq!(line, "this is test line 2\n");
+//!
+//! // Now there is enough space to write more.
+//! write!(&mut buf, "this is test line {}\n", i)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! [`.flush()`]: struct.MapMut.html#method.flush
+//! [`.into_map()`]: struct.MapMut.html#method.into_map
+//! [`.into_map_mut()`]: struct.Map.html#method.into_map_mut
+//! [`BufReader`]: io/struct.BufReader.html
+//! [`BufWriter`]: io/struct.BufWriter.html
+//! [`InfiniteRing`]: io/struct.InfiniteRing.html
+//! [`Map::with_options()`]: struct.Map.html#method.with_options
+//! [`MapMut::with_options()`]: struct.MapMut.html#method.with_options
+//! [`MapMut`]: struct.MapMut.html
+//! [`Map`]: struct.Map.html
+//! [`Options`]: struct.Options.html
+//! [`Ring`]: io/struct.Ring.html
+//! [`vmap::io`]: io/index.html
 
 #![deny(missing_docs)]
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "os")]
 pub mod os;
+
+#[cfg(not(feature = "os"))]
+mod os;
 
 mod error;
 pub use self::error::{ConvertResult, Error, Input, Operation, Result};
@@ -52,10 +155,8 @@ pub use self::error::{ConvertResult, Error, Input, Operation, Result};
 mod map;
 pub use self::map::{Map, MapMut, Options};
 
+#[cfg(feature = "io")]
 pub mod io;
-
-/// Type to represent whole page offsets and counts.
-pub type Pgno = u32;
 
 /// Protection level for a page.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -72,8 +173,6 @@ pub enum Protect {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Flush {
     /// Request dirty pages to be written immediately and block until completed.
-    ///
-    /// This is not supported on Windows. The flush is always performed asynchronously.
     Sync,
     /// Request dirty pages to be written but do not wait for completion.
     Async,
@@ -254,8 +353,8 @@ impl Size {
         unsafe { Self::with_size(allocation_size()) }
     }
 
-    /// Creates a type for calculating page numbers and byte offsets using a
-    /// known page size.
+    /// Creates a type for calculating allocations numbers and byte offsets
+    /// using a known size.
     ///
     /// # Safety
     ///
@@ -278,15 +377,15 @@ impl Size {
         Size(size)
     }
 
-    /// Round a byte size up to the nearest page size.
+    /// Round a byte size up to the nearest unit size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.round(0), 0);
     /// assert_eq!(size.round(1), sys);       // probably 4096
     /// assert_eq!(size.round(sys-1), sys);   // probably 4096
@@ -298,15 +397,15 @@ impl Size {
         self.truncate(len + self.0 - 1)
     }
 
-    /// Round a byte size down to the nearest page size.
+    /// Round a byte size down to the nearest unit size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.truncate(0), 0);
     /// assert_eq!(size.truncate(1), 0);
     /// assert_eq!(size.truncate(sys-1), 0);
@@ -318,50 +417,51 @@ impl Size {
         len & !(self.0 - 1)
     }
 
-    /// Calculate the byte offset from page containing the position.
+    /// Calculate the byte offset from size unit containing the position.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.offset(1), 1);
     /// assert_eq!(size.offset(sys-1), sys-1);
     /// assert_eq!(size.offset(sys*2 + 123), 123);
     /// ```
+    #[inline]
     pub fn offset(&self, len: usize) -> usize {
         len & (self.0 - 1)
     }
 
-    /// Convert a page count into a byte size.
+    /// Convert a unit count into a byte size.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.size(0), 0);
     /// assert_eq!(size.size(1), sys);   // probably 4096
     /// assert_eq!(size.size(2), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn size(&self, count: Pgno) -> usize {
+    pub fn size(&self, count: u32) -> usize {
         (count as usize) << self.0.trailing_zeros()
     }
 
-    /// Covert a byte size into the number of pages necessary to contain it.
+    /// Covert a byte size into the number of units necessary to contain it.
     ///
     /// # Examples
     ///
     /// ```
     /// use vmap::Size;
     ///
-    /// let sys = vmap::allocation_size();
-    /// let size = Size::alloc();
+    /// let sys = vmap::page_size();
+    /// let size = Size::page();
     /// assert_eq!(size.count(0), 0);
     /// assert_eq!(size.count(1), 1);
     /// assert_eq!(size.count(sys-1), 1);
@@ -370,16 +470,17 @@ impl Size {
     /// assert_eq!(size.count(sys*2), 2);
     /// ```
     #[inline]
-    pub fn count(&self, len: usize) -> Pgno {
-        (self.round(len) >> self.0.trailing_zeros()) as Pgno
+    pub fn count(&self, len: usize) -> u32 {
+        (self.round(len) >> self.0.trailing_zeros()) as u32
     }
 
-    /// Calculates the page bounds for a pointer and length.
+    /// Calculates the unit bounds for a pointer and length.
     ///
     /// # Safety
     ///
     /// There is no verification that the pointer is a mapped page nor that
     /// the calculated offset may be dereferenced.
+    #[inline]
     pub unsafe fn bounds(&self, ptr: *mut u8, len: usize) -> (*mut u8, usize) {
         let off = self.offset(ptr as usize);
         (ptr.offset(-(off as isize)), self.round(len + off))
@@ -522,7 +623,7 @@ mod tests {
 
     #[test]
     fn alloc_offset() -> Result<()> {
-        // map to the offset of the last 5 bytes of a page, but map 6 bytes
+        // map to the offset of the last 5 bytes of an allocation size, but map 6 bytes
         let off = Size::alloc().size(1) - 5;
         let mut map = MapMut::with_options().offset(off).len(6).alloc()?;
 
@@ -541,7 +642,7 @@ mod tests {
     #[test]
     fn read_end() -> Result<()> {
         let (_tmp, path, len) = write_default("read_end")?;
-        let map = Map::with_options().offset(29).open(&path)?;
+        let (map, _) = Map::with_options().offset(29).open(&path)?;
         assert!(map.len() >= 30);
         assert_eq!(len - 29, map.len());
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
@@ -551,7 +652,7 @@ mod tests {
     #[test]
     fn read_min() -> Result<()> {
         let (_tmp, path, len) = write_default("read_min")?;
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .offset(29)
             .len(Extent::Min(30))
             .open(&path)?;
@@ -565,7 +666,7 @@ mod tests {
     #[test]
     fn read_max() -> Result<()> {
         let (_tmp, path, _len) = write_default("read_max")?;
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .offset(29)
             .len(Extent::Max(30))
             .open(&path)?;
@@ -577,7 +678,7 @@ mod tests {
     #[test]
     fn read_exact() -> Result<()> {
         let (_tmp, path, _len) = write_default("read_exact")?;
-        let map = Map::with_options().offset(29).len(30).open(&path)?;
+        let (map, _) = Map::with_options().offset(29).len(30).open(&path)?;
         assert!(map.len() == 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
         Ok(())
@@ -586,7 +687,7 @@ mod tests {
     #[test]
     fn copy() -> Result<()> {
         let (_tmp, path, _len) = write_default("copy")?;
-        let mut map = MapMut::with_options()
+        let (mut map, _) = MapMut::with_options()
             .offset(29)
             .len(30)
             .copy()
@@ -605,7 +706,7 @@ mod tests {
         let path: PathBuf = tmp.path().join("write_into_mut");
         fs::write(&path, "this is a test").expect("failed to write file");
 
-        let map = Map::with_options().write().resize(16).open(&path)?;
+        let (map, _) = Map::with_options().write().resize(16).open(&path)?;
         assert_eq!(16, map.len());
         assert_eq!(Ok("this is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("this is a test\0\0"), from_utf8(&map[..]));
@@ -619,7 +720,7 @@ mod tests {
         assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
 
-        let map = Map::with_options().open(&path)?;
+        let (map, _) = Map::with_options().open(&path)?;
         assert_eq!(16, map.len());
         assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
@@ -633,7 +734,7 @@ mod tests {
         let path: PathBuf = tmp.path().join("truncate");
         fs::write(&path, "this is a test").expect("failed to write file");
 
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .write()
             .truncate(true)
             .resize(16)

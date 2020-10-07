@@ -1,6 +1,6 @@
 [package]
 name = "vmap"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Jeremy Larkin <jeremylarkin@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/kalamay/vmap-rs"
@@ -8,6 +8,12 @@ documentation = "https://docs.rs/vmap"
 description = "Cross-platform library for fast and safe memory-mapped IO"
 keywords = ["mmap", "io", "file", "circular-buffer", "ring-buffer"]
 edition = "2018"
+
+[features]
+default = ["all"]
+all = ["io", "os"]
+io = []
+os = []
 
 [dependencies]
 system_error = "0.1.1"
