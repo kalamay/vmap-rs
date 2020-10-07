@@ -813,7 +813,6 @@ impl<T: FromPtr> Options<T> {
     /// let first = map1[0];
     ///
     /// map1[0] = b'X';
-    /// map1.flush(&file, vmap::Flush::Sync)?;
     ///
     /// assert_eq!(first, map2[0]);
     /// # Ok(())
