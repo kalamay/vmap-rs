@@ -24,7 +24,7 @@
 //! # fs::write(&path, b"this is a test")?;
 //!
 //! // Open with write permissions so the Map can be converted into a MapMut
-//! let map = Map::with_options().write().len(14).open(&path)?;
+//! let (map, file) = Map::with_options().write().len(14).open(&path)?;
 //! assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
 //!
 //! // Move the Map into a MapMut
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn read_end() -> Result<()> {
         let (_tmp, path, len) = write_default("read_end")?;
-        let map = Map::with_options().offset(29).open(&path)?;
+        let (map, _) = Map::with_options().offset(29).open(&path)?;
         assert!(map.len() >= 30);
         assert_eq!(len - 29, map.len());
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..30]));
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn read_min() -> Result<()> {
         let (_tmp, path, len) = write_default("read_min")?;
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .offset(29)
             .len(Extent::Min(30))
             .open(&path)?;
@@ -565,7 +565,7 @@ mod tests {
     #[test]
     fn read_max() -> Result<()> {
         let (_tmp, path, _len) = write_default("read_max")?;
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .offset(29)
             .len(Extent::Max(30))
             .open(&path)?;
@@ -577,7 +577,7 @@ mod tests {
     #[test]
     fn read_exact() -> Result<()> {
         let (_tmp, path, _len) = write_default("read_exact")?;
-        let map = Map::with_options().offset(29).len(30).open(&path)?;
+        let (map, _) = Map::with_options().offset(29).len(30).open(&path)?;
         assert!(map.len() == 30);
         assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
         Ok(())
@@ -586,7 +586,7 @@ mod tests {
     #[test]
     fn copy() -> Result<()> {
         let (_tmp, path, _len) = write_default("copy")?;
-        let mut map = MapMut::with_options()
+        let (mut map, _) = MapMut::with_options()
             .offset(29)
             .len(30)
             .copy()
@@ -605,7 +605,7 @@ mod tests {
         let path: PathBuf = tmp.path().join("write_into_mut");
         fs::write(&path, "this is a test").expect("failed to write file");
 
-        let map = Map::with_options().write().resize(16).open(&path)?;
+        let (map, _) = Map::with_options().write().resize(16).open(&path)?;
         assert_eq!(16, map.len());
         assert_eq!(Ok("this is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("this is a test\0\0"), from_utf8(&map[..]));
@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
 
-        let map = Map::with_options().open(&path)?;
+        let (map, _) = Map::with_options().open(&path)?;
         assert_eq!(16, map.len());
         assert_eq!(Ok("that is a test"), from_utf8(&map[..14]));
         assert_eq!(Ok("that is a test\0\0"), from_utf8(&map[..]));
@@ -633,7 +633,7 @@ mod tests {
         let path: PathBuf = tmp.path().join("truncate");
         fs::write(&path, "this is a test").expect("failed to write file");
 
-        let map = Map::with_options()
+        let (map, _) = Map::with_options()
             .write()
             .truncate(true)
             .resize(16)

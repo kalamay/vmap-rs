@@ -27,10 +27,10 @@ use crate::{
 /// let path: PathBuf = /* path to file */
 /// # tmp.path().join("example");
 /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-/// let page = Map::with_options().offset(29).len(30).open(&path)?;
-/// page.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
-/// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&page[..]));
-/// assert_eq!(Ok("safe"), from_utf8(&page[9..13]));
+/// let (map, file) = Map::with_options().offset(29).len(30).open(&path)?;
+/// map.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
+/// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
+/// assert_eq!(Ok("safe"), from_utf8(&map[9..13]));
 /// # Ok(())
 /// # }
 /// ```
@@ -57,7 +57,7 @@ impl Map {
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
     /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .offset(29)
     ///     .len(30)
     ///     .open(&path)?;
@@ -97,7 +97,7 @@ impl Map {
     /// ```
     #[deprecated(since = "0.4.0", note = "use Map::with_options().open(path) instead")]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Self::with_options().open(path)
+        Ok(Self::with_options().open(path)?.0)
     }
 
     /// Create a new map object from a range of a file.
@@ -196,7 +196,7 @@ impl Map {
     /// # fs::write(&path, b"this is a test")?;
     ///
     /// // Map the beginning of the file
-    /// let map = Map::with_options().write().len(14).open(path)?;
+    /// let (map, file) = Map::with_options().write().len(14).open(path)?;
     /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     ///
     /// let mut map = map.into_map_mut()?;
@@ -344,7 +344,7 @@ impl MapMut {
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
     /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let mut map = MapMut::with_options()
+    /// let (mut map, file) = MapMut::with_options()
     ///     .offset(29)
     ///     .len(30)
     ///     .open(&path)?;
@@ -405,7 +405,7 @@ impl MapMut {
         note = "use MapMut::with_options().open(path) instead"
     )]
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Self::with_options().open(path)
+        Ok(Self::with_options().open(path)?.0)
     }
 
     /// Create a new mutable map object from a range of a file.
@@ -512,7 +512,7 @@ impl MapMut {
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
     /// # fs::write(&path, b"this is a test")?;
-    /// let mut map = MapMut::with_options().len(14).open(&path)?;
+    /// let (mut map, file) = MapMut::with_options().len(14).open(&path)?;
     /// assert_eq!(Ok("this is a test"), from_utf8(&map[..]));
     ///
     /// map[..4].clone_from_slice(b"that");
@@ -776,10 +776,10 @@ impl<T: FromPtr> Options<T> {
     /// use vmap::Map;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let map = Map::with_options().open("README.md")?;
+    /// let (map, file) = Map::with_options().open("README.md")?;
     /// assert!(map.into_map_mut().is_err());
     ///
-    /// let map = Map::with_options().write().open("README.md")?;
+    /// let (map, file) = Map::with_options().write().open("README.md")?;
     /// assert!(map.into_map_mut().is_ok());
     /// # Ok(())
     /// # }
@@ -808,11 +808,12 @@ impl<T: FromPtr> Options<T> {
     /// use vmap::MapMut;
     ///
     /// # fn main() -> vmap::Result<()> {
-    /// let mut map1 = MapMut::with_options().copy().open("README.md")?;
-    /// let mut map2 = MapMut::with_options().copy().open("README.md")?;
+    /// let (mut map1, file) = MapMut::with_options().copy().open("README.md")?;
+    /// let (mut map2, _) = MapMut::with_options().copy().open("README.md")?;
     /// let first = map1[0];
     ///
     /// map1[0] = b'X';
+    /// map1.flush(&file, vmap::Flush::Sync)?;
     ///
     /// assert_eq!(first, map2[0]);
     /// # Ok(())
@@ -843,13 +844,13 @@ impl<T: FromPtr> Options<T> {
     /// # let tmp = tempdir::TempDir::new("vmap")?;
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
-    /// let mut map = MapMut::with_options().create(true).resize(100).open(&path)?;
+    /// let (mut map, file) = MapMut::with_options().create(true).resize(100).open(&path)?;
     /// assert_eq!(100, map.len());
     /// assert_eq!(b"\0\0\0\0", &map[..4]);
     ///
     /// map[..4].clone_from_slice(b"test");
     ///
-    /// let map = Map::with_options().open(&path)?;
+    /// let (map, file) = Map::with_options().open(&path)?;
     /// assert_eq!(100, map.len());
     /// assert_eq!(b"test", &map[..4]);
     /// # Ok(())
@@ -887,7 +888,7 @@ impl<T: FromPtr> Options<T> {
     /// let path: PathBuf = /* path to file */
     /// # tmp.path().join("example");
     ///
-    /// let map = MapMut::with_options().create_new(true).resize(10).open(&path)?;
+    /// let (map, file) = MapMut::with_options().create_new(true).resize(10).open(&path)?;
     /// assert_eq!(10, map.len());
     /// assert!(MapMut::with_options().create_new(true).open(&path).is_err());
     /// # Ok(())
@@ -924,7 +925,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     ///
     /// {
-    ///     let mut map = MapMut::with_options()
+    ///     let (mut map, file) = MapMut::with_options()
     ///         .create(true)
     ///         .truncate(true)
     ///         .resize(4)
@@ -934,7 +935,7 @@ impl<T: FromPtr> Options<T> {
     ///     assert_eq!(b"test", &map[..]);
     /// }
     ///
-    /// let mut map = MapMut::with_options().truncate(true).resize(4).open(&path)?;
+    /// let (mut map, file) = MapMut::with_options().truncate(true).resize(4).open(&path)?;
     /// assert_eq!(b"\0\0\0\0", &map[..]);
     /// # Ok(())
     /// # }
@@ -968,7 +969,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options().offset(10).open(path)?;
+    /// let (map, file) = Map::with_options().offset(10).open(path)?;
     /// assert_eq!(Ok("test"), from_utf8(&map[..]));
     /// # Ok(())
     /// # }
@@ -1018,7 +1019,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .len(4) // or .len(Extent::Exaxt(4))
     ///     .open(&path)?;
     /// assert_eq!(Ok("this"), from_utf8(&map[..]));
@@ -1053,7 +1054,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .offset(5)
     ///     .len(Extent::Min(4))
     ///     .open(&path)?;
@@ -1064,6 +1065,7 @@ impl<T: FromPtr> Options<T> {
     ///     Map::with_options()
     ///         .len(Extent::Min(100))
     ///         .open_if(&path)?
+    ///         .0
     ///         .is_none()
     /// );
     ///
@@ -1093,7 +1095,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///    .offset(5)
     ///    .len(Extent::Max(100))
     ///    .open(&path)?;
@@ -1161,7 +1163,7 @@ impl<T: FromPtr> Options<T> {
     /// # tmp.path().join("example");
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .write()
     ///     .resize(7) // or .resize(Extent::Exact(7))
     ///     .open(&path)?;
@@ -1191,7 +1193,7 @@ impl<T: FromPtr> Options<T> {
     /// fs::write(&path, b"this")?;
     ///
     /// {
-    ///     let map = Map::with_options()
+    ///     let (map, file) = Map::with_options()
     ///         .write()
     ///         .resize(Extent::Min(7))
     ///         .open(&path)?;
@@ -1201,7 +1203,7 @@ impl<T: FromPtr> Options<T> {
     ///
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .write()
     ///     .resize(Extent::Min(7))
     ///     .open(&path)?;
@@ -1230,7 +1232,7 @@ impl<T: FromPtr> Options<T> {
     /// fs::write(&path, b"this")?;
     ///
     /// {
-    ///     let map = Map::with_options()
+    ///     let (map, file) = Map::with_options()
     ///         .write()
     ///         .resize(Extent::Max(7))
     ///         .open(&path)?;
@@ -1240,7 +1242,7 @@ impl<T: FromPtr> Options<T> {
     ///
     /// fs::write(&path, b"this is a test")?;
     ///
-    /// let map = Map::with_options()
+    /// let (map, file) = Map::with_options()
     ///     .write()
     ///     .resize(Extent::Max(7))
     ///     .open(&path)?;
@@ -1272,6 +1274,10 @@ impl<T: FromPtr> Options<T> {
     /// Unlike [`.open_if()`], when the requested offset or length lies outside of
     /// the underlying file, an error is returned.
     ///
+    /// The returned [`File`] can be discarded if no longer needed to [`.flush()`]
+    /// or [`.map()`] other regions. This does not need to be kept open in order to
+    /// use the mapped value.
+    ///
     /// # Examples
     ///
     /// ```
@@ -1292,8 +1298,12 @@ impl<T: FromPtr> Options<T> {
     /// ```
     ///
     /// [`.open_if()`]: #method.open_if
-    pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<T> {
-        self.map(&self.open_options.open(path).map_err(map_file_err)?)
+    /// [`.map()`]: #method.map
+    /// [`.flush()`]: struct.MapMut.html#method.flush
+    /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
+    pub fn open<P: AsRef<Path>>(&self, path: P) -> Result<(T, File)> {
+        let f = self.open_options.open(path).map_err(map_file_err)?;
+        Ok((self.map(&f)?, f))
     }
 
     /// Opens and maps a file with the options specified by `self` if the
@@ -1301,6 +1311,10 @@ impl<T: FromPtr> Options<T> {
     ///
     /// Unlike [`.open()`], when the requested offset or length lies outside of
     /// the underlying file, `Ok(None)` will be returned rather than an error.
+    ///
+    /// The returned [`File`] can be discarded if no longer needed to [`.flush()`]
+    /// or [`.map()`] other regions. This does not need to be kept open in order to
+    /// use the mapped value.
     ///
     /// # Examples
     ///
@@ -1319,14 +1333,18 @@ impl<T: FromPtr> Options<T> {
     ///
     /// let result = Map::with_options().len(25).open_if(&path);
     /// assert!(result.is_ok());
-    /// assert!(result.unwrap().is_none());
+    /// assert!(result.unwrap().0.is_none());
     /// # Ok(())
     /// # }
     /// ```
     ///
     /// [`.open()`]: #method.open
-    pub fn open_if<P: AsRef<Path>>(&self, path: P) -> Result<Option<T>> {
-        self.map_if(&self.open_options.open(path).map_err(map_file_err)?)
+    /// [`.map()`]: #method.map
+    /// [`.flush()`]: struct.MapMut.html#method.flush
+    /// [`File`]: https://doc.rust-lang.org/std/fs/struct.File.html
+    pub fn open_if<P: AsRef<Path>>(&self, path: P) -> Result<(Option<T>, File)> {
+        let f = self.open_options.open(path).map_err(map_file_err)?;
+        Ok((self.map_if(&f)?, f))
     }
 
     /// Maps an open `File` using the current options specified by `self`.
