@@ -335,7 +335,7 @@ impl MapMut {
     /// # Examples
     ///
     /// ```
-    /// use vmap::MapMut;
+    /// use vmap::{MapMut, Flush};
     /// use std::path::PathBuf;
     /// use std::str::from_utf8;
     ///
@@ -350,6 +350,8 @@ impl MapMut {
     ///     .open(&path)?;
     /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map));
     /// map[..4].clone_from_slice(b"nice");
+    ///
+    /// map.flush_range(&file, 0, 4, Flush::Sync);
     ///
     /// assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map));
     /// # Ok(())
@@ -553,6 +555,21 @@ impl MapMut {
         unsafe {
             let (ptr, len) = Size::page().bounds(self.ptr, self.len);
             flush(ptr, file, len, mode)
+        }
+    }
+
+    /// Writes modifications back to the filesystem for a sub-range of the map.
+    ///
+    /// Flushes will happen automatically, but this will invoke a flush and
+    /// return any errors with doing so.
+    pub fn flush_range(&self, file: &File, off: usize, len: usize, mode: Flush) -> Result<()> {
+        if off + len > self.len {
+            Err(Error::input(Operation::Flush, Input::InvalidRange))
+        } else {
+            unsafe {
+                let (ptr, len) = Size::page().bounds(self.ptr.add(off), len);
+                flush(ptr, file, len, mode)
+            }
         }
     }
 
