@@ -135,6 +135,7 @@ unsafe fn reserve(len: usize) -> Result<*mut c_void> {
     }
 }
 
+#[cfg(feature = "io")]
 unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Result<*mut u8> {
     let a = map.view(RingPrimary, FILE_MAP_READ | FILE_MAP_WRITE, 0, len, pg)?;
     let b = map.view(
@@ -157,6 +158,7 @@ unsafe fn map_ring_handle(map: &MapHandle, len: usize, pg: *mut c_void) -> Resul
 /// The length is the size of the sequential range, and the offset of
 /// `len+1` refers to the same memory location at offset `0`. The circle
 /// continues to up through the offset of `2*len - 1`.
+#[cfg(feature = "io")]
 pub fn map_ring(len: usize) -> Result<*mut u8> {
     let full = 2 * len;
     let map = unsafe { MapHandle::new(RingAllocate, INVALID_HANDLE_VALUE, PAGE_READWRITE, full)? };
@@ -182,6 +184,7 @@ pub unsafe fn unmap(pg: *mut u8, _len: usize) -> Result<()> {
 }
 
 /// Unmaps a ring mapping created by `map_ring`.
+#[cfg(feature = "io")]
 pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     if UnmapViewOfFile(pg.offset(len as isize) as *mut c_void) == 0 {
         Err(Error::last_os_error(RingDeallocate))

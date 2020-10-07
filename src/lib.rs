@@ -44,7 +44,11 @@
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "os")]
 pub mod os;
+
+#[cfg(not(feature = "os"))]
+mod os;
 
 mod error;
 pub use self::error::{ConvertResult, Error, Input, Operation, Result};
@@ -52,6 +56,7 @@ pub use self::error::{ConvertResult, Error, Input, Operation, Result};
 mod map;
 pub use self::map::{Map, MapMut, Options};
 
+#[cfg(feature = "io")]
 pub mod io;
 
 /// Protection level for a page.

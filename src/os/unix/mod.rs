@@ -17,15 +17,15 @@ use self::Operation::*;
 // For macOS and iOS we use the mach vm system for rings. The posix module
 // does work correctly on these targets, but it necessitates an otherwise
 // uneeded file descriptor.
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(all(feature = "io", any(target_os = "macos", target_os = "ios")))]
 mod mach;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(all(feature = "io", any(target_os = "macos", target_os = "ios")))]
 pub use self::mach::{map_ring, unmap_ring};
 
 // For non-mach targets load the POSIX version of the ring mapping functions.
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[cfg(all(feature = "io", not(any(target_os = "macos", target_os = "ios"))))]
 mod posix;
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[cfg(all(feature = "io", not(any(target_os = "macos", target_os = "ios"))))]
 pub use self::posix::{map_ring, unmap_ring};
 
 /// Requests the page size and allocation granularity from the system.
