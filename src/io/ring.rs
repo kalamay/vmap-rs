@@ -26,16 +26,30 @@ use std::io::{self, BufRead, Read, Write};
 /// # fn main() -> std::io::Result<()> {
 /// let mut buf = Ring::new(4000).unwrap();
 /// let mut i = 1;
+///
+/// // Fill up the buffer with lines.
 /// while buf.write_len() > 20 {
 ///     write!(&mut buf, "this is test line {}\n", i)?;
 ///     i += 1;
 /// }
+///
+/// // No more space is available.
 /// assert!(write!(&mut buf, "this is test line {}\n", i).is_err());
 ///
 /// let mut line = String::new();
+///
+/// // Read the first line written.
 /// let len = buf.read_line(&mut line)?;
-/// assert_eq!(len, 20);
 /// assert_eq!(line, "this is test line 1\n");
+///
+/// line.clear();
+///
+/// // Read the second line written.
+/// let len = buf.read_line(&mut line)?;
+/// assert_eq!(line, "this is test line 2\n");
+///
+/// // Now there is enough space to write more.
+/// write!(&mut buf, "this is test line {}\n", i)?;
 /// # Ok(())
 /// # }
 /// ```

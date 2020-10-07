@@ -74,6 +74,16 @@ fn map(op: Operation, pg: *mut u8, len: usize, flags: c_int, fd: c_int) -> Resul
 }
 
 /// Unmaps a ring mapping created by `map_ring`.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     unmap(pg, 2 * len)
 }

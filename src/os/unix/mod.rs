@@ -75,6 +75,16 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
 }
 
 /// Unmaps a page range from a previos mapping.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
     if munmap(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error(Unmap))
@@ -84,6 +94,16 @@ pub unsafe fn unmap(pg: *mut u8, len: usize) -> Result<()> {
 }
 
 /// Changes the protection for a page range.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
     let prot = match prot {
         Protect::ReadOnly => PROT_READ,
@@ -98,6 +118,16 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
 }
 
 /// Writes modified whole pages back to the filesystem.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Result<()> {
     let flags = match mode {
         Flush::Sync => MS_SYNC,
@@ -111,6 +141,16 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
 }
 
 /// Updates the advise for the page range.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn advise(
     pg: *mut u8,
     len: usize,
@@ -135,6 +175,16 @@ pub unsafe fn advise(
 }
 
 /// Locks physical pages into memory.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn lock(pg: *mut u8, len: usize) -> Result<()> {
     if mlock(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error(Lock))
@@ -144,6 +194,16 @@ pub unsafe fn lock(pg: *mut u8, len: usize) -> Result<()> {
 }
 
 /// Unlocks physical pages from memory.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn unlock(pg: *mut u8, len: usize) -> Result<()> {
     if munlock(pg as *mut c_void, len) < 0 {
         Err(Error::last_os_error(Unlock))

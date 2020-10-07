@@ -131,6 +131,16 @@ pub fn map_ring(len: usize) -> Result<*mut u8> {
 }
 
 /// Unmaps a ring mapping created by `map_ring`.
+///
+/// # Safety
+///
+/// This does not know or care if `pg` or `len` are valid. That is,
+/// it may be null, not at a proper page boundary, point to a size
+/// different from `len`, or worse yet, point to a properly mapped
+/// pointer from some other allocation system.
+///
+/// Generally don't use this unless you are entirely sure you are
+/// doing so correctly.
 pub unsafe fn unmap_ring(pg: *mut u8, len: usize) -> Result<()> {
     let port = mach_task_self();
     let ret = vm_deallocate(port, pg as vm_address_t, 2 * len);
