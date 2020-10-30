@@ -53,3 +53,50 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+
+  test_android:
+    name: Test Android
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install Cross
+        run: |
+          CROSS_URL=https://github.com/rust-embedded/cross/releases/download/v0.2.1/cross-v0.2.1-x86_64-unknown-linux-gnu.tar.gz
+          mkdir -p "$HOME/.bin"
+          curl -sfSL --retry-delay 10 --retry 5 "${CROSS_URL}" | tar zxf - -C "$HOME/.bin"
+          echo "$HOME/.bin" >> $GITHUB_PATH
+      - name: Run cross test
+        run: cross test --target aarch64-linux-android
+
+  build_misc:
+    name: Build miscellaneous systems
+    strategy:
+      matrix:
+        target:
+          - x86_64-sun-solaris
+          - x86_64-unknown-netbsd
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install Cross
+        run: |
+          CROSS_URL=https://github.com/rust-embedded/cross/releases/download/v0.2.1/cross-v0.2.1-x86_64-unknown-linux-gnu.tar.gz
+          mkdir -p "$HOME/.bin"
+          curl -sfSL --retry-delay 10 --retry 5 "${CROSS_URL}" | tar zxf - -C "$HOME/.bin"
+          echo "$HOME/.bin" >> $GITHUB_PATH
+      - name: Run cross build
+        run: cross build --target ${{ matrix.target }}
