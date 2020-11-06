@@ -142,6 +142,7 @@
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{mem, ptr};
 
 #[cfg(feature = "os")]
 pub mod os;
@@ -507,6 +508,25 @@ pub trait Span: Deref<Target = [u8]> + Sized + sealed::Span {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Performs a volatile read of the value at a given offset.
+    ///
+    /// Volatile operations are intended to act on I/O memory, and are
+    /// guaranteed to not be elided or reordered by the compiler across
+    /// other volatile operations.
+    #[inline]
+    fn read_volatile<T: sealed::Scalar>(&self, offset: usize) -> T {
+        assert_capacity::<T>(offset, self.len());
+        assert_alignment::<T>(offset, self.as_ptr());
+        unsafe { ptr::read_volatile(self.as_ptr().add(offset) as *const T) }
+    }
+
+    /// Performs an unaligned read of the value at a given offset.
+    #[inline]
+    fn read_unaligned<T: sealed::Scalar>(&self, offset: usize) -> T {
+        assert_capacity::<T>(offset, self.len());
+        unsafe { ptr::read_unaligned(self.as_ptr().add(offset) as *const T) }
+    }
 }
 
 /// General trait for working with any memory-safe representation of a
@@ -514,6 +534,25 @@ pub trait Span: Deref<Target = [u8]> + Sized + sealed::Span {
 pub trait SpanMut: Span + DerefMut {
     /// Get a mutable pointer to the start of the allocated region.
     fn as_mut_ptr(&mut self) -> *mut u8;
+
+    /// Performs a volatile write of the value at a given offset.
+    ///
+    /// Volatile operations are intended to act on I/O memory, and are
+    /// guaranteed to not be elided or reordered by the compiler across
+    /// other volatile operations.
+    #[inline]
+    fn write_volatile<T: sealed::Scalar>(&mut self, offset: usize, value: T) {
+        assert_capacity::<T>(offset, self.len());
+        assert_alignment::<T>(offset, self.as_ptr());
+        unsafe { ptr::write_volatile(self.as_mut_ptr().add(offset) as *mut T, value) }
+    }
+
+    /// Performs an unaligned write of the value at a given offset.
+    #[inline]
+    fn write_unaligned<T: sealed::Scalar>(&mut self, offset: usize, value: T) {
+        assert_capacity::<T>(offset, self.len());
+        unsafe { ptr::write_unaligned(self.as_mut_ptr().add(offset) as *mut T, value) }
+    }
 }
 
 impl<'a> Span for &'a [u8] {
@@ -557,6 +596,46 @@ mod sealed {
 
     pub trait FromPtr {
         unsafe fn from_ptr(ptr: *mut u8, len: usize) -> Self;
+    }
+
+    pub trait Scalar: Default {}
+
+    impl Scalar for u8 {}
+    impl Scalar for i8 {}
+    impl Scalar for u16 {}
+    impl Scalar for i16 {}
+    impl Scalar for u32 {}
+    impl Scalar for i32 {}
+    impl Scalar for u64 {}
+    impl Scalar for i64 {}
+    impl Scalar for u128 {}
+    impl Scalar for i128 {}
+    impl Scalar for usize {}
+    impl Scalar for isize {}
+    impl Scalar for f32 {}
+    impl Scalar for f64 {}
+}
+
+#[inline]
+fn assert_alignment<T>(offset: usize, ptr: *const u8) {
+    if unsafe { ptr.add(offset) } as usize % mem::align_of::<T>() != 0 {
+        panic!(
+            "offset improperly aligned: the requirement is {} but the offset is +{}/-{}",
+            mem::align_of::<T>(),
+            ptr as usize % mem::align_of::<T>(),
+            mem::align_of::<T>() - (ptr as usize % mem::align_of::<T>()),
+        )
+    }
+}
+
+#[inline]
+fn assert_capacity<T>(offset: usize, len: usize) {
+    if offset + mem::size_of::<T>() > len {
+        panic!(
+            "index out of bounds: the len is {} but the index is {}",
+            len,
+            offset + mem::size_of::<T>()
+        )
     }
 }
 
@@ -758,5 +837,65 @@ mod tests {
             name,
             "A cross-platform library for fast and safe memory-mapped IO in Rust",
         )
+    }
+
+    #[test]
+    fn volatile() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("volatile");
+
+        let (mut map, _) = MapMut::with_options()
+            .write()
+            .truncate(true)
+            .create(true)
+            .resize(16)
+            .open(&path)?;
+        assert_eq!(16, map.len());
+
+        assert_eq!(0u64, map.read_volatile(0));
+        assert_eq!(0u64, map.read_volatile(8));
+
+        map.write_volatile(0, 0xc3a5c85c97cb3127u64);
+        map.write_volatile(8, 0xb492b66fbe98f273u64);
+
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_volatile(0));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_volatile(8));
+
+        let (map, _) = Map::with_options().open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_volatile(0));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_volatile(8));
+
+        Ok(())
+    }
+
+    #[test]
+    fn unaligned() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("unaligned");
+
+        let (mut map, _) = MapMut::with_options()
+            .write()
+            .truncate(true)
+            .create(true)
+            .resize(17)
+            .open(&path)?;
+        assert_eq!(17, map.len());
+
+        assert_eq!(0u64, map.read_unaligned(1));
+        assert_eq!(0u64, map.read_unaligned(9));
+
+        map.write_unaligned(1, 0xc3a5c85c97cb3127u64);
+        map.write_unaligned(9, 0xb492b66fbe98f273u64);
+
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_unaligned(1));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_unaligned(9));
+
+        let (map, _) = Map::with_options().open(&path)?;
+        assert_eq!(17, map.len());
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_unaligned(1));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_unaligned(9));
+
+        Ok(())
     }
 }

@@ -34,7 +34,7 @@ impl MapHandle {
             file,
             ptr::null_mut(),
             prot,
-            (len >> 32) as DWORD,
+            (len >> 16 >> 16) as DWORD,
             (len & 0xffffffff) as DWORD,
             ptr::null(),
         );
@@ -55,7 +55,7 @@ impl MapHandle {
         MapViewOfFileEx(
             self.map,
             access as DWORD,
-            (off >> 32) as DWORD,
+            (off >> 16 >> 16) as DWORD,
             (off & 0xffffffff) as DWORD,
             len as SIZE_T,
             at,
