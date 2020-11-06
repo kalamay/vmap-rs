@@ -838,4 +838,64 @@ mod tests {
             "A cross-platform library for fast and safe memory-mapped IO in Rust",
         )
     }
+
+    #[test]
+    fn volatile() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("volatile");
+
+        let (mut map, _) = MapMut::with_options()
+            .write()
+            .truncate(true)
+            .create(true)
+            .resize(16)
+            .open(&path)?;
+        assert_eq!(16, map.len());
+
+        assert_eq!(0u64, map.read_volatile(0));
+        assert_eq!(0u64, map.read_volatile(8));
+
+        map.write_volatile(0, 0xc3a5c85c97cb3127u64);
+        map.write_volatile(8, 0xb492b66fbe98f273u64);
+
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_volatile(0));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_volatile(8));
+
+        let (map, _) = Map::with_options().open(&path)?;
+        assert_eq!(16, map.len());
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_volatile(0));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_volatile(8));
+
+        Ok(())
+    }
+
+    #[test]
+    fn unaligned() -> Result<()> {
+        let tmp = tempdir::TempDir::new("vmap")?;
+        let path: PathBuf = tmp.path().join("unaligned");
+
+        let (mut map, _) = MapMut::with_options()
+            .write()
+            .truncate(true)
+            .create(true)
+            .resize(17)
+            .open(&path)?;
+        assert_eq!(17, map.len());
+
+        assert_eq!(0u64, map.read_unaligned(1));
+        assert_eq!(0u64, map.read_unaligned(9));
+
+        map.write_unaligned(1, 0xc3a5c85c97cb3127u64);
+        map.write_unaligned(9, 0xb492b66fbe98f273u64);
+
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_unaligned(1));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_unaligned(9));
+
+        let (map, _) = Map::with_options().open(&path)?;
+        assert_eq!(17, map.len());
+        assert_eq!(0xc3a5c85c97cb3127u64, map.read_unaligned(1));
+        assert_eq!(0xb492b66fbe98f273u64, map.read_unaligned(9));
+
+        Ok(())
+    }
 }
