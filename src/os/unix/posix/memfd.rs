@@ -35,10 +35,15 @@ pub fn memfd_open() -> Result<c_int> {
     const OFLAGS: c_int = libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC;
     let mut path_bytes: [u8; 14] = *b"/vmap-XXXXXXX\0";
 
-    for i in (0..10000000).cycle() {
+    loop {
         let path = {
             use std::io::Write;
-            write!(&mut path_bytes[6..], "{:0>7}", i).unwrap();
+            let pseudorandom = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
+                % 10000000;
+            write!(&mut path_bytes[6..], "{:0>7}", pseudorandom).unwrap();
             std::ffi::CStr::from_bytes_with_nul(&path_bytes).unwrap()
         };
 
@@ -53,5 +58,4 @@ pub fn memfd_open() -> Result<c_int> {
             return Ok(fd);
         }
     }
-    unreachable!();
 }
