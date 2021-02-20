@@ -118,17 +118,17 @@ assert_eq!(line, "this is test line 2\n");
 write!(&mut buf, "this is test line {}\n", i)?;
 ```
 
-[`.flush()`]: https://docs.rs/vmap/0.4.3/vmap/struct.MapMut.html#method.flush
-[`.into_map()`]: https://docs.rs/vmap/0.4.3/vmap/struct.MapMut.html#method.into_map
-[`.into_map_mut()`]: https://docs.rs/vmap/0.4.3/vmap/struct.Map.html#method.into_map_mut
-[`BufReader`]: https://docs.rs/vmap/0.4.3/vmap/io/struct.BufReader.html
-[`BufWriter`]: https://docs.rs/vmap/0.4.3/vmap/io/struct.BufWriter.html
-[`InfiniteRing`]: https://docs.rs/vmap/0.4.3/vmap/io/struct.InfiniteRing.html
-[`Map::with_options()`]: https://docs.rs/vmap/0.4.3/vmap/struct.Map.html#method.with_options
-[`MapMut::with_options()`]: https://docs.rs/vmap/0.4.3/vmap/struct.MapMut.html#method.with_options
-[`MapMut`]: https://docs.rs/vmap/0.4.3/vmap/struct.MapMut.html
-[`Map`]: https://docs.rs/vmap/0.4.3/vmap/struct.Map.html
-[`Options`]: https://docs.rs/vmap/0.4.3/vmap/struct.Options.html
-[`Ring`]: https://docs.rs/vmap/0.4.3/vmap/io/struct.Ring.html
-[`vmap::io`]: https://docs.rs/vmap/0.4.3/vmap/io/index.html
+[`.flush()`]: https://docs.rs/vmap/0.4.4/vmap/struct.MapMut.html#method.flush
+[`.into_map()`]: https://docs.rs/vmap/0.4.4/vmap/struct.MapMut.html#method.into_map
+[`.into_map_mut()`]: https://docs.rs/vmap/0.4.4/vmap/struct.Map.html#method.into_map_mut
+[`BufReader`]: https://docs.rs/vmap/0.4.4/vmap/io/struct.BufReader.html
+[`BufWriter`]: https://docs.rs/vmap/0.4.4/vmap/io/struct.BufWriter.html
+[`InfiniteRing`]: https://docs.rs/vmap/0.4.4/vmap/io/struct.InfiniteRing.html
+[`Map::with_options()`]: https://docs.rs/vmap/0.4.4/vmap/struct.Map.html#method.with_options
+[`MapMut::with_options()`]: https://docs.rs/vmap/0.4.4/vmap/struct.MapMut.html#method.with_options
+[`MapMut`]: https://docs.rs/vmap/0.4.4/vmap/struct.MapMut.html
+[`Map`]: https://docs.rs/vmap/0.4.4/vmap/struct.Map.html
+[`Options`]: https://docs.rs/vmap/0.4.4/vmap/struct.Options.html
+[`Ring`]: https://docs.rs/vmap/0.4.4/vmap/io/struct.Ring.html
+[`vmap::io`]: https://docs.rs/vmap/0.4.4/vmap/io/index.html
 [`vmap`]: https://docs.rs/vmap/
