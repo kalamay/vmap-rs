@@ -69,112 +69,6 @@ impl Map {
         Options::new()
     }
 
-    /// Creates a new read-only map object using the full range of a file.
-    ///
-    /// The underlying file handle is open as read-only. If there is a need to
-    /// convert the `Map` into a `MapMut`, use `Map::file` with a file handle
-    /// open for writing. If not done, the convertion to `MapMut` will fail.
-    ///
-    /// # Examples
-    /// ```
-    /// use vmap::Map;
-    /// use std::path::PathBuf;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let map = Map::open(&path)?;
-    /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
-    ///
-    /// // The file handle is read-only.
-    /// assert!(map.into_map_mut().is_err());
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[deprecated(since = "0.4.0", note = "use Map::with_options().open(path) instead")]
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Ok(Self::with_options().open(path)?.0)
-    }
-
-    /// Create a new map object from a range of a file.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vmap::Map;
-    /// use std::path::PathBuf;
-    /// use std::fs::OpenOptions;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let file = OpenOptions::new().read(true).open(&path)?;
-    /// let map = Map::file(&file, 29, 30)?;
-    /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
-    ///
-    /// let map = Map::file(&file, 0, file.metadata()?.len() as usize + 1);
-    /// assert!(map.is_err());
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[deprecated(
-        since = "0.4.0",
-        note = "use Map::with_options().offset(off).len(len).map(f) instead"
-    )]
-    pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
-        Self::with_options().offset(offset).len(length).map(f)
-    }
-
-    /// Create a new map object from a maximum range of a file. Unlike `file`,
-    /// the length is only a maximum size to map. If the length of the file
-    /// is less than the requested range, the returned mapping will be
-    /// shortened to match the file.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vmap::Map;
-    /// use std::path::PathBuf;
-    /// use std::fs::OpenOptions;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let file = OpenOptions::new().read(true).open(&path)?;
-    /// let map = Map::file_max(&file, 0, 5000)?.expect("should be valid range");
-    /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
-    ///
-    /// let map = Map::file_max(&file, 0, file.metadata()?.len() as usize + 1);
-    /// assert!(!map.is_err());
-    ///
-    /// let map = Map::file_max(&file, 5000, 100)?;
-    /// assert!(map.is_none());
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[deprecated(
-        since = "0.4.0",
-        note = "use Map::with_options().offset(off).len(Extent::Max(len)).map_if(f) instead"
-    )]
-    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
-        Self::with_options()
-            .offset(offset)
-            .len(Extent::Max(max_length))
-            .map_if(f)
-    }
-
     /// Transfer ownership of the map into a mutable map.
     ///
     /// This will change the protection of the mapping. If the original file
@@ -213,19 +107,6 @@ impl Map {
                 Err(err) => Err((err, self)),
             }
         }
-    }
-
-    /// Transfer ownership of the map into a mutable map.
-    ///
-    /// This will change the protection of the mapping. If the original file
-    /// was not opened with write permissions, this will error.
-    ///
-    /// This will cause the original map to be dropped if the protection change
-    /// fails. Using `into_map_mut` allows the original map to be retained in the
-    /// case of a failure.
-    #[deprecated(since = "0.4.0", note = "use try_into or into_map_mut instead")]
-    pub fn make_mut(self) -> Result<MapMut> {
-        Ok(self.into_map_mut()?)
     }
 
     /// Updates the advise for the entire mapped region..
@@ -382,119 +263,6 @@ impl MapMut {
         Self::with_options().len(Extent::Min(hint)).alloc()
     }
 
-    /// Creates a new read/write map object using the full range of a file.
-    ///
-    /// # Examples
-    /// ```
-    /// use vmap::MapMut;
-    /// use std::path::PathBuf;
-    /// use std::fs::OpenOptions;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let map = MapMut::open(&path)?;
-    /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[29..59]));
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().open(path) instead"
-    )]
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        Ok(Self::with_options().open(path)?.0)
-    }
-
-    /// Create a new mutable map object from a range of a file.
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().offset(off).len(len).map(f) instead"
-    )]
-    pub fn file(f: &File, offset: usize, length: usize) -> Result<Self> {
-        Self::with_options().offset(offset).len(length).map(f)
-    }
-
-    /// Create a new mutable map object from a maximum range of a file. Unlike
-    /// `file`, the length is only a maximum size to map. If the length of the
-    /// file is less than the requested range, the returned mapping will be
-    /// shortened to match the file.
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().offset(off).len(Extent::Max(len)).map_if(f) instead"
-    )]
-    pub fn file_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
-        Self::with_options()
-            .offset(offset)
-            .len(Extent::Max(max_length))
-            .map_if(f)
-    }
-
-    /// Create a new private map object from a range of a file.
-    ///
-    /// Initially, the mapping will be shared with other processes, but writes
-    /// will be kept private.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use vmap::MapMut;
-    /// use std::path::PathBuf;
-    /// use std::fs::OpenOptions;
-    /// use std::str::from_utf8;
-    ///
-    /// # fn main() -> vmap::Result<()> {
-    /// # let tmp = tempdir::TempDir::new("vmap")?;
-    /// let path: PathBuf = /* path to file */
-    /// # tmp.path().join("example");
-    /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
-    /// let file = OpenOptions::new().read(true).open(&path)?;
-    ///
-    /// let mut map = MapMut::copy(&file, 29, 30)?;
-    /// assert_eq!(map.is_empty(), false);
-    /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
-    ///
-    /// map[..4].clone_from_slice(b"nice");
-    ///
-    /// assert_eq!(Ok("nice and safe memory-mapped IO"), from_utf8(&map[..]));
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().copy().offset(off).len(len).map(f) instead"
-    )]
-    pub fn copy(f: &File, offset: usize, length: usize) -> Result<Self> {
-        Self::with_options()
-            .copy()
-            .offset(offset)
-            .len(length)
-            .map(f)
-    }
-
-    /// Create a new private map object from a range of a file.  Unlike
-    /// `copy`, the length is only a maximum size to map. If the length of the
-    /// file is less than the requested range, the returned mapping will be
-    /// shortened to match the file.
-    ///
-    /// Initially, the mapping will be shared with other processes, but writes
-    /// will be kept private.
-    #[deprecated(
-        since = "0.4.0",
-        note = "use MapMut::with_options().copy().offset(off).len(Extent::Max(len)).map_if(f) instead"
-    )]
-    pub fn copy_max(f: &File, offset: usize, max_length: usize) -> Result<Option<Self>> {
-        Self::with_options()
-            .copy()
-            .offset(offset)
-            .len(Extent::Max(max_length))
-            .map_if(f)
-    }
-
     /// Transfer ownership of the map into a mutable map.
     ///
     /// This will change the protection of the mapping. If the original file
@@ -532,19 +300,6 @@ impl MapMut {
                 Err(err) => Err((err, self)),
             }
         }
-    }
-
-    /// Transfer ownership of the map into a mutable map.
-    ///
-    /// This will change the protection of the mapping. If the original file
-    /// was not opened with write permissions, this will error.
-    ///
-    /// This will cause the original map to be dropped if the protection change
-    /// fails. Using `into_map` allows the original map to be retained in the
-    /// case of a failure.
-    #[deprecated(since = "0.4.0", note = "use try_into or into_map instead")]
-    pub fn make_read_only(self) -> Result<Map> {
-        Ok(self.into_map()?)
     }
 
     /// Writes modifications back to the filesystem.
