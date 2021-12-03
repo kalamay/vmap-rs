@@ -1,10 +1,9 @@
 use std::convert::TryFrom;
 use std::fs::{File, OpenOptions};
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::slice;
-use std::{cmp, fmt, io};
+use std::{cmp, fmt, io, marker};
 
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::sealed::FromPtr;
@@ -510,7 +509,7 @@ pub struct Options<T: FromPtr> {
     offset: usize,
     protect: Protect,
     truncate: bool,
-    phantom: PhantomData<T>,
+    _marker: marker::PhantomData<fn() -> T>,
 }
 
 impl<T: FromPtr> Options<T> {
@@ -532,7 +531,7 @@ impl<T: FromPtr> Options<T> {
             offset: 0,
             protect: Protect::ReadOnly,
             truncate: false,
-            phantom: PhantomData,
+            _marker: marker::PhantomData,
         }
     }
 
