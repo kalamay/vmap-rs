@@ -7,7 +7,7 @@ repository = "https://github.com/kalamay/vmap-rs"
 documentation = "https://docs.rs/vmap"
 description = "Cross-platform library for fast and safe memory-mapped IO"
 keywords = ["mmap", "io", "file", "circular-buffer", "ring-buffer"]
-edition = "2018"
+edition = "2021"
 
 [features]
 default = ["all"]
@@ -19,10 +19,10 @@ os = []
 system_error = "0.1.1"
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = "0.2.109"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["std", "basetsd", "minwindef", "sysinfoapi", "handleapi", "memoryapi", "fileapi"] }
+winapi = { version = "0.3.9", features = ["std", "basetsd", "minwindef", "sysinfoapi", "handleapi", "memoryapi", "fileapi"] }
 
 [dev-dependencies]
-tempdir = "0.3"
+tempdir = "0.3.7"
