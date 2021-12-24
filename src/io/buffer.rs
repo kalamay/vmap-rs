@@ -69,7 +69,7 @@ impl<R: Read> BufReader<R> {
 
     /// Returns a reference to the internally buffered data.
     pub fn buffer(&self) -> &[u8] {
-        &self.buf.as_read_slice(std::usize::MAX)
+        self.buf.as_read_slice(std::usize::MAX)
     }
 
     /// Unwraps this `BufReader`, returning the underlying reader.
@@ -155,7 +155,7 @@ impl<W: Write> BufWriter<W> {
 
     /// Gets a reference to the underlying writer.
     pub fn get_ref(&self) -> &W {
-        &self.inner.as_ref().unwrap()
+        self.inner.as_ref().unwrap()
     }
 
     /// Gets a mutable reference to the underlying writer.

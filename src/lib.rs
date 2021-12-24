@@ -288,27 +288,6 @@ fn load_system_info() -> (u32, u32) {
 /// # Examples
 ///
 /// ```
-/// let size = vmap::AllocSize::new();
-/// let pages = size.count(200);
-/// assert_eq!(pages, 1);
-///
-/// let round = size.round(200);
-/// println!("200 bytes requires a {} byte mapping", round);
-///
-/// let count = size.count(10000);
-/// println!("10000 bytes requires {} pages", count);
-///
-/// let size = size.size(3);
-/// println!("3 pages are {} bytes", size);
-/// ```
-#[deprecated(since = "0.4.0", note = "use Size instead")]
-pub type AllocSize = Size;
-
-/// Type for calculation system page or allocation size information.
-///
-/// # Examples
-///
-/// ```
 /// let size = vmap::Size::alloc();
 /// let pages = size.count(200);
 /// assert_eq!(pages, 1);
@@ -326,16 +305,6 @@ pub type AllocSize = Size;
 pub struct Size(usize);
 
 impl Size {
-    /// Creates a type for calculating allocation numbers and byte offsets.
-    ///
-    /// The size is determined from the system's configurated allocation
-    /// granularity. This value is cached making it very cheap to construct.
-    #[inline]
-    #[deprecated(since = "0.4.0", note = "use Size::alloc() instead")]
-    pub fn new() -> Self {
-        Self::alloc()
-    }
-
     /// Creates a type for calculating page numbers and byte offsets.
     ///
     /// The size is determined from the system's configurated page size.
