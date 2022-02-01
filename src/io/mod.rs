@@ -113,6 +113,8 @@ pub trait SeqWrite {
 
 #[cfg(test)]
 mod tests {
+    use crate::os;
+
     use super::super::Size;
     use super::{InfiniteRing, Ring, SeqRead, SeqWrite};
     use std::io::{BufRead, Write};
@@ -149,6 +151,35 @@ mod tests {
 
         let cmp = b"anthropomorphologicallyanthropomorphologically";
         assert_eq!(buf.as_read_slice(cmp.len()), &cmp[..]);
+    }
+
+    #[test]
+    fn ring_sizes_vs_page_size() {
+        let page_size = os::system_info().0 as usize;
+        for ring_size in page_size..page_size * 4 { // currently (v0.5.0) fails at 2*page_size + 1!
+            // let ring_size:usize = offset+(2*os::system_info().0) as usize;
+            let mut buf = Ring::new(ring_size).expect("failed to create ring buffer");
+            // we write two byte pattern starting with 0x1001
+            let start_val = 0x1001usize;
+            let word_size = u16::BITS as usize / 8;
+
+            let n = buf.write_capacity() / word_size; // bytes per u16
+            //println!("n = {}", n);
+            for val in start_val..start_val + n {
+                buf.write_all(&((val & 0xffff) as u16).to_ne_bytes())
+                    .expect("failed to write");
+            }
+            assert_eq!(buf.read_len(), n * word_size);
+            for expected in start_val..start_val + n {
+                assert_eq!(
+                    buf.as_read_slice(word_size),
+                    &((expected & 0xffff) as u16).to_ne_bytes(),
+                    "mismatch at {:x}, ring_size={}",
+                    expected, ring_size
+                );
+                buf.consume(2);
+            }
+        }
     }
 
     #[test]
