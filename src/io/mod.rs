@@ -155,31 +155,59 @@ mod tests {
 
     #[test]
     fn ring_sizes_vs_page_size() {
+        let mut did_fail = false;
         let page_size = os::system_info().0 as usize;
-        for ring_size in page_size..page_size * 4 { // currently (v0.5.0) fails at 2*page_size + 1!
-            // let ring_size:usize = offset+(2*os::system_info().0) as usize;
-            let mut buf = Ring::new(ring_size).expect("failed to create ring buffer");
-            // we write two byte pattern starting with 0x1001
-            let start_val = 0x1001usize;
-            let word_size = u16::BITS as usize / 8;
+        for pages in (2..10).rev() {
+            for offset in [-1i32, 0, 1].iter() {
+                // was failing with v0.5.0 at 2*page_size + 1!
+                let ring_size: usize = ((pages * page_size) as i32 + offset) as usize;
+                // let ring_size:usize = offset+(2*os::system_info().0) as usize;
+                let mut buf = Ring::new(ring_size).expect("failed to create ring buffer");
+                // we write two byte pattern starting with 0x1001
+                let start_val = 0x1001usize;
+                let word_size = u16::BITS as usize / 8;
 
-            let n = buf.write_capacity() / word_size; // bytes per u16
-            //println!("n = {}", n);
-            for val in start_val..start_val + n {
-                buf.write_all(&((val & 0xffff) as u16).to_ne_bytes())
-                    .expect("failed to write");
-            }
-            assert_eq!(buf.read_len(), n * word_size);
-            for expected in start_val..start_val + n {
-                assert_eq!(
-                    buf.as_read_slice(word_size),
-                    &((expected & 0xffff) as u16).to_ne_bytes(),
-                    "mismatch at {:x}, ring_size={}",
-                    expected, ring_size
-                );
-                buf.consume(2);
+                let n = buf.write_capacity() / word_size; // bytes per u16
+                for val in start_val..start_val + n {
+                    buf.write_all(&((val & 0xffff) as u16).to_ne_bytes())
+                        .expect("failed to write");
+                }
+                assert_eq!(buf.read_len(), n * word_size);
+                let mut mismatched = false;
+                for expected in start_val..start_val + n {
+                    let read = buf.as_read_slice(word_size);
+                    let read_u16 = u16::from_ne_bytes(read[0..2].try_into().unwrap());
+                    let expe = &((expected & 0xffff) as u16).to_ne_bytes();
+                    let read_page = (expected - start_val)*word_size / page_size;
+                    if read != expe {
+                        if !mismatched {
+                            println!(
+                            "mismatch (page #{}): expected 0x{:x} got 0x{:x}, ring_size={}, alloc_size={}",
+                            read_page,
+                            expected, read_u16,
+                            ring_size,
+                            Size::alloc().round(ring_size)
+                            );
+                            mismatched = true;
+                            did_fail = true;
+                        }
+                    } else {
+                        if mismatched {
+                            println!(
+                                "mismatch end at (page #{}) val 0x{:x}, ring_size={}, alloc_size={}",
+                                read_page,
+                                expected,
+                                ring_size,
+                                Size::alloc().round(ring_size)
+                                );
+                            mismatched = false;
+                        }
+                    }
+                    buf.consume(2);
+                }
             }
         }
+        assert!(!did_fail);
     }
 
     #[test]
