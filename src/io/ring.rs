@@ -56,7 +56,7 @@ use std::io::{self, BufRead, Read, Write};
 #[derive(Debug)]
 pub struct Ring {
     ptr: *mut u8,
-    mask: u64,
+    len: usize,
     rpos: u64,
     wpos: u64,
 }
@@ -73,7 +73,7 @@ impl Ring {
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,
-            mask: len as u64 - 1,
+            len,
             rpos: 0,
             wpos: 0,
         })
@@ -91,7 +91,7 @@ impl SeqRead for Ring {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        (self.rpos & self.mask) as usize
+        self.rpos as usize % self.len
     }
     fn read_len(&self) -> usize {
         (self.wpos - self.rpos) as usize
@@ -103,15 +103,16 @@ impl SeqWrite for Ring {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos & self.mask) as usize
+        self.wpos as usize % self.len
     }
     fn write_len(&self) -> usize {
         self.write_capacity() - self.read_len()
     }
     fn write_capacity(&self) -> usize {
-        self.mask as usize + 1
+        self.len
     }
     fn feed(&mut self, len: usize) {
+        // todo will fail at u64 boundary
         self.wpos += cmp::min(len, self.write_len()) as u64;
     }
 }
@@ -185,7 +186,7 @@ impl Write for Ring {
 #[derive(Debug)]
 pub struct InfiniteRing {
     ptr: *mut u8,
-    mask: u64,
+    len: usize,
     rlen: u64,
     wpos: u64,
 }
@@ -202,7 +203,7 @@ impl InfiniteRing {
         let ptr = map_ring(len)?;
         Ok(Self {
             ptr,
-            mask: len as u64 - 1,
+            len,
             rlen: 0,
             wpos: 0,
         })
@@ -220,7 +221,7 @@ impl SeqRead for InfiniteRing {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        ((self.wpos - self.rlen) & self.mask) as usize
+        (self.wpos - self.rlen)as usize % self.len
     }
     fn read_len(&self) -> usize {
         self.rlen as usize
@@ -232,17 +233,17 @@ impl SeqWrite for InfiniteRing {
         self.ptr
     }
     fn write_offset(&self) -> usize {
-        (self.wpos & self.mask) as usize
+        self.wpos as usize % self.len
     }
     fn write_len(&self) -> usize {
         self.write_capacity()
     }
     fn write_capacity(&self) -> usize {
-        self.mask as usize + 1
+        self.len
     }
     fn feed(&mut self, len: usize) {
         self.wpos += cmp::min(len, self.write_len()) as u64;
-        self.rlen = cmp::min(self.rlen + len as u64, self.mask + 1);
+        self.rlen = cmp::min(self.rlen + len as u64, self.len as u64);
     }
 }
 
