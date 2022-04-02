@@ -1,6 +1,6 @@
 [package]
 name = "vmap"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Jeremy Larkin <jeremylarkin@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/kalamay/vmap-rs"
