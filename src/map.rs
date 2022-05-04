@@ -99,13 +99,11 @@ impl Map {
     /// # }
     /// ```
     pub fn into_map_mut(self) -> ConvertResult<MapMut, Self> {
-        unsafe {
-            let (ptr, len) = Size::page().bounds(self.0.ptr, self.0.len);
-            match protect(ptr, len, Protect::ReadWrite) {
+            let (ptr, len) = unsafe { Size::page().bounds(self.0.ptr, self.0.len) };
+            match unsafe { protect(ptr, len, Protect::ReadWrite) }{
                 Ok(()) => Ok(self.0),
                 Err(err) => Err((err, self)),
             }
-        }
     }
 
     /// Updates the advise for the entire mapped region..
@@ -292,13 +290,11 @@ impl MapMut {
     /// # }
     /// ```
     pub fn into_map(self) -> ConvertResult<Map, Self> {
-        unsafe {
-            let (ptr, len) = Size::page().bounds(self.ptr, self.len);
-            match protect(ptr, len, Protect::ReadWrite) {
+            let (ptr, len) = unsafe { Size::page().bounds(self.ptr, self.len) };
+            match unsafe { protect(ptr, len, Protect::ReadWrite) }{
                 Ok(()) => Ok(Map(self)),
                 Err(err) => Err((err, self)),
             }
-        }
     }
 
     /// Writes modifications back to the filesystem.
