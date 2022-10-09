@@ -12,12 +12,12 @@ use winapi::um::fileapi::FlushFileBuffers;
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
 use winapi::um::memoryapi::{
     CreateFileMappingW, FlushViewOfFile, MapViewOfFileEx, UnmapViewOfFile, VirtualAlloc,
-    VirtualFree, VirtualLock, VirtualProtect, VirtualUnlock, FILE_MAP_COPY, FILE_MAP_READ,
-    FILE_MAP_WRITE,
+    VirtualFree, VirtualLock, VirtualProtect, VirtualUnlock, FILE_MAP_COPY, FILE_MAP_EXECUTE,
+    FILE_MAP_READ, FILE_MAP_WRITE,
 };
 use winapi::um::sysinfoapi::{GetSystemInfo, LPSYSTEM_INFO, SYSTEM_INFO};
 use winapi::um::winnt::{
-    MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
+    MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, PAGE_EXECUTE_READ, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
 };
 
 use crate::{Error, Operation, Result};
@@ -103,6 +103,7 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
         Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_COPY),
+        Protect::ReadExec => (PAGE_EXECUTE_READ, FILE_MAP_READ | FILE_MAP_EXECUTE),
     };
 
     unsafe {
@@ -117,6 +118,7 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
         Protect::ReadOnly => (PAGE_READONLY, FILE_MAP_READ),
         Protect::ReadWrite => (PAGE_READWRITE, FILE_MAP_READ | FILE_MAP_WRITE),
         Protect::ReadCopy => (PAGE_WRITECOPY, FILE_MAP_COPY),
+        Protect::ReadExec => (PAGE_EXECUTE_READ, FILE_MAP_READ | FILE_MAP_EXECUTE),
     };
 
     unsafe {
@@ -230,6 +232,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
         Protect::ReadOnly => PAGE_READONLY,
         Protect::ReadWrite => PAGE_READWRITE,
         Protect::ReadCopy => PAGE_READWRITE,
+        Protect::ReadExec => PAGE_EXECUTE_READ,
     };
     let mut old = 0;
     if VirtualProtect(pg as *mut c_void, len, prot, &mut old) == 0 {

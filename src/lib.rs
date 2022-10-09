@@ -168,6 +168,8 @@ pub enum Protect {
     ReadWrite,
     /// Like `ReadWrite`, but changes are not shared.
     ReadCopy,
+    /// The page(s) may be read from and executed.
+    ReadExec,
 }
 
 /// Desired behavior when flushing write changes.
