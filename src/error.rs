@@ -298,11 +298,9 @@ pub enum Operation {
     ///
     /// [`Protect`]: ../enum.Protect.html
     Protect,
-    /// The [`AdviseAccess`] or [`AdviseUsage`] could not be applied to the
-    /// provided memory region.
+    /// The [`Advise`] could not be applied to the provided memory region.
     ///
-    /// [`AdviseAccess`]: ../enum.AdviseAccess.html
-    /// [`AdviseUsage`]: ../enum.AdviseUsage.html
+    /// [`Advise`]: ../enum.Advise.html
     Advise,
     /// The physical page could not be locked into memory.
     Lock,

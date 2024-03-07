@@ -1,4 +1,4 @@
-use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
+use crate::{Advise, Flush, Protect};
 
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
@@ -154,20 +154,13 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
 ///
 /// Generally don't use this unless you are entirely sure you are
 /// doing so correctly.
-pub unsafe fn advise(
-    pg: *mut u8,
-    len: usize,
-    access: AdviseAccess,
-    usage: AdviseUsage,
-) -> Result<()> {
-    let adv = match access {
-        AdviseAccess::Normal => MADV_NORMAL,
-        AdviseAccess::Sequential => MADV_SEQUENTIAL,
-        AdviseAccess::Random => MADV_RANDOM,
-    } | match usage {
-        AdviseUsage::Normal => 0,
-        AdviseUsage::WillNeed => MADV_WILLNEED,
-        AdviseUsage::WillNotNeed => MADV_DONTNEED,
+pub unsafe fn advise(pg: *mut u8, len: usize, adv: Advise) -> Result<()> {
+    let adv = match adv {
+        Advise::Normal => MADV_NORMAL,
+        Advise::Sequential => MADV_SEQUENTIAL,
+        Advise::Random => MADV_RANDOM,
+        Advise::WillNeed => MADV_WILLNEED,
+        Advise::WillNotNeed => MADV_DONTNEED,
     };
 
     if madvise(pg as *mut c_void, len, adv) < 0 {

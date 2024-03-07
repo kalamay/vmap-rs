@@ -1,4 +1,4 @@
-use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
+use crate::{Advise, Flush, Protect};
 use std::os::windows::raw::HANDLE;
 
 use std::fs::File;
@@ -17,7 +17,8 @@ use winapi::um::memoryapi::{
 };
 use winapi::um::sysinfoapi::{GetSystemInfo, LPSYSTEM_INFO, SYSTEM_INFO};
 use winapi::um::winnt::{
-    MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, PAGE_EXECUTE_READ, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY,
+    MEM_RELEASE, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE,
+    PAGE_WRITECOPY,
 };
 
 use crate::{Error, Operation, Result};
@@ -280,12 +281,7 @@ pub unsafe fn flush(pg: *mut u8, file: &File, len: usize, mode: Flush) -> Result
 ///
 /// Generally don't use this unless you are entirely sure you are
 /// doing so correctly.
-pub unsafe fn advise(
-    _pg: *mut u8,
-    _len: usize,
-    _access: AdviseAccess,
-    _usage: AdviseUsage,
-) -> Result<()> {
+pub unsafe fn advise(_pg: *mut u8, _len: usize, _adv: Advise) -> Result<()> {
     Ok(())
 }
 
