@@ -28,6 +28,24 @@ impl<F> From<(Error, F)> for Error {
 }
 
 /// A list specifying general categories of map errors.
+///
+/// These errors can be converted into `std::io::Error` values.
+///
+/// # Examples
+///
+/// ```should_panic
+/// fn create_map() -> vmap::Result<vmap::Map> {
+///     /// ...
+/// # use vmap::{Error, Operation, Input};
+/// # Err(Error::input(Operation::MapFile, Input::InvalidRange))
+/// }
+///
+/// fn main() -> std::io::Result<()> {
+///     let map = create_map()?;
+///     println!("len = {}\n", map.len());
+///     Ok(())
+/// }
+/// ```
 pub struct Error {
     repr: Repr,
     op: Operation,
@@ -235,6 +253,16 @@ impl From<std::io::Error> for Error {
         Self {
             repr: Repr::Io(err),
             op: Operation::None,
+        }
+    }
+}
+
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        match err.repr {
+            Repr::Io(io) => io,
+            Repr::Input(v) => Self::new(io::ErrorKind::InvalidInput, v.as_str()),
+            Repr::System(sys) => sys.into(),
         }
     }
 }

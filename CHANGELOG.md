@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2024-03-07
+- Add error conversion
+
 ## [0.6.0] - 2024-03-06
 - Update page advice
 - Reduce unsafe areas [@peamaeq](https://github.com/peamaeq)
@@ -43,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stopped using deprecated examples where possible
 - Return the `File` object when `open`ing from a path
 
-[Unreleased]: https://github.com/kalamay/vmap-rs/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kalamay/vmap-rs/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/kalamay/vmap-rs/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kalamay/vmap-rs/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/kalamay/vmap-rs/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/kalamay/vmap-rs/compare/v0.4.4...v0.5.0
