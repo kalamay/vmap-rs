@@ -89,8 +89,8 @@ impl Drop for MapHandle {
 
 /// Requests the page size and allocation granularity from the system.
 pub fn system_info() -> (u32, u32) {
+    let mut info = mem::MaybeUninit::<SYSTEM_INFO>::uninit();
     let info = unsafe {
-        let mut info = mem::MaybeUninit::<SYSTEM_INFO>::uninit();
         GetSystemInfo(info.as_mut_ptr() as LPSYSTEM_INFO);
         info.assume_init()
     };
