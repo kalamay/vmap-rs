@@ -168,6 +168,8 @@ pub enum Protect {
     ReadWrite,
     /// Like `ReadWrite`, but changes are not shared.
     ReadCopy,
+    /// The page(s) may be read from and executed.
+    ReadExec,
 }
 
 /// Desired behavior when flushing write changes.
@@ -181,20 +183,13 @@ pub enum Flush {
 
 /// Hint for the access pattern of the underlying mapping.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum AdviseAccess {
+pub enum Advise {
     /// Use the system default behavior.
     Normal,
     /// The map will be accessed in a sequential manner.
     Sequential,
     /// The map will be accessed in a random manner.
     Random,
-}
-
-/// Hint for the immediacy of accessing the underlying mapping.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum AdviseUsage {
-    /// Use the system default behavior.
-    Normal,
     /// The map is expected to be accessed soon.
     WillNeed,
     /// The map is not expected to be accessed soon.

@@ -8,8 +8,8 @@ use std::{cmp, fmt, io, marker};
 use crate::os::{advise, flush, lock, map_anon, map_file, protect, unlock, unmap};
 use crate::sealed::FromPtr;
 use crate::{
-    AdviseAccess, AdviseUsage, ConvertResult, Error, Extent, Flush, Input, Operation, Protect,
-    Result, Size, Span, SpanMut,
+    Advise, ConvertResult, Error, Extent, Flush, Input, Operation, Protect, Result, Size, Span,
+    SpanMut,
 };
 
 /// Allocation of one or more read-only sequential pages.
@@ -17,7 +17,7 @@ use crate::{
 /// # Examples
 ///
 /// ```
-/// use vmap::{Map, AdviseAccess, AdviseUsage};
+/// use vmap::{Map, Advise};
 /// use std::path::PathBuf;
 /// use std::str::from_utf8;
 ///
@@ -27,7 +27,7 @@ use crate::{
 /// # tmp.path().join("example");
 /// # std::fs::write(&path, "A cross-platform library for fast and safe memory-mapped IO in Rust")?;
 /// let (map, file) = Map::with_options().offset(29).len(30).open(&path)?;
-/// map.advise(AdviseAccess::Sequential, AdviseUsage::WillNeed)?;
+/// map.advise(Advise::Sequential)?;
 /// assert_eq!(Ok("fast and safe memory-mapped IO"), from_utf8(&map[..]));
 /// assert_eq!(Ok("safe"), from_utf8(&map[9..13]));
 /// # Ok(())
@@ -107,19 +107,13 @@ impl Map {
     }
 
     /// Updates the advise for the entire mapped region..
-    pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
-        self.0.advise(access, usage)
+    pub fn advise(&self, adv: Advise) -> Result<()> {
+        self.0.advise(adv)
     }
 
     /// Updates the advise for a specific range of the mapped region.
-    pub fn advise_range(
-        &self,
-        off: usize,
-        len: usize,
-        access: AdviseAccess,
-        usage: AdviseUsage,
-    ) -> Result<()> {
-        self.0.advise_range(off, len, access, usage)
+    pub fn advise_range(&self, off: usize, len: usize, adv: Advise) -> Result<()> {
+        self.0.advise_range(off, len, adv)
     }
 
     /// Lock all mapped physical pages into memory.
@@ -324,27 +318,21 @@ impl MapMut {
     }
 
     /// Updates the advise for the entire mapped region..
-    pub fn advise(&self, access: AdviseAccess, usage: AdviseUsage) -> Result<()> {
+    pub fn advise(&self, adv: Advise) -> Result<()> {
         unsafe {
             let (ptr, len) = Size::page().bounds(self.ptr, self.len);
-            advise(ptr, len, access, usage)
+            advise(ptr, len, adv)
         }
     }
 
     /// Updates the advise for a specific range of the mapped region.
-    pub fn advise_range(
-        &self,
-        off: usize,
-        len: usize,
-        access: AdviseAccess,
-        usage: AdviseUsage,
-    ) -> Result<()> {
+    pub fn advise_range(&self, off: usize, len: usize, adv: Advise) -> Result<()> {
         if off + len > self.len {
             Err(Error::input(Operation::Advise, Input::InvalidRange))
         } else {
             unsafe {
                 let (ptr, len) = Size::page().bounds(self.ptr.add(off), len);
-                advise(ptr, len, access, usage)
+                advise(ptr, len, adv)
             }
         }
     }

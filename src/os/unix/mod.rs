@@ -1,4 +1,4 @@
-use crate::{AdviseAccess, AdviseUsage, Flush, Protect};
+use crate::{Advise, Flush, Protect};
 
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
@@ -7,7 +7,7 @@ use std::ptr;
 use libc::{
     c_void, madvise, mlock, mmap, mprotect, msync, munlock, munmap, off_t, sysconf, MADV_DONTNEED,
     MADV_NORMAL, MADV_RANDOM, MADV_SEQUENTIAL, MADV_WILLNEED, MAP_ANON, MAP_FAILED, MAP_PRIVATE,
-    MAP_SHARED, MS_ASYNC, MS_SYNC, PROT_READ, PROT_WRITE, _SC_PAGESIZE,
+    MAP_SHARED, MS_ASYNC, MS_SYNC, PROT_EXEC, PROT_READ, PROT_WRITE, _SC_PAGESIZE,
 };
 
 use crate::{Error, Operation, Result};
@@ -48,6 +48,7 @@ pub fn map_file(file: &File, off: usize, len: usize, prot: Protect) -> Result<*m
         Protect::ReadOnly => (PROT_READ, MAP_SHARED),
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_PRIVATE),
+        Protect::ReadExec => (PROT_READ | PROT_EXEC, MAP_PRIVATE),
     };
     unsafe {
         result(
@@ -70,6 +71,7 @@ pub fn map_anon(len: usize, prot: Protect) -> Result<*mut u8> {
         Protect::ReadOnly => (PROT_READ, MAP_SHARED),
         Protect::ReadWrite => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED),
         Protect::ReadCopy => (PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE),
+        Protect::ReadExec => (PROT_READ | PROT_EXEC, MAP_ANON | MAP_PRIVATE),
     };
     unsafe { result(MapAnonymous, mmap(ptr::null_mut(), len, prot, flags, -1, 0)) }
 }
@@ -109,6 +111,7 @@ pub unsafe fn protect(pg: *mut u8, len: usize, prot: Protect) -> Result<()> {
         Protect::ReadOnly => PROT_READ,
         Protect::ReadWrite => PROT_READ | PROT_WRITE,
         Protect::ReadCopy => PROT_READ | PROT_WRITE,
+        Protect::ReadExec => PROT_READ | PROT_EXEC,
     };
     if mprotect(pg as *mut c_void, len, prot) != 0 {
         Err(Error::last_os_error(Protect))
@@ -151,20 +154,13 @@ pub unsafe fn flush(pg: *mut u8, _file: &File, len: usize, mode: Flush) -> Resul
 ///
 /// Generally don't use this unless you are entirely sure you are
 /// doing so correctly.
-pub unsafe fn advise(
-    pg: *mut u8,
-    len: usize,
-    access: AdviseAccess,
-    usage: AdviseUsage,
-) -> Result<()> {
-    let adv = match access {
-        AdviseAccess::Normal => MADV_NORMAL,
-        AdviseAccess::Sequential => MADV_SEQUENTIAL,
-        AdviseAccess::Random => MADV_RANDOM,
-    } | match usage {
-        AdviseUsage::Normal => 0,
-        AdviseUsage::WillNeed => MADV_WILLNEED,
-        AdviseUsage::WillNotNeed => MADV_DONTNEED,
+pub unsafe fn advise(pg: *mut u8, len: usize, adv: Advise) -> Result<()> {
+    let adv = match adv {
+        Advise::Normal => MADV_NORMAL,
+        Advise::Sequential => MADV_SEQUENTIAL,
+        Advise::Random => MADV_RANDOM,
+        Advise::WillNeed => MADV_WILLNEED,
+        Advise::WillNotNeed => MADV_DONTNEED,
     };
 
     if madvise(pg as *mut c_void, len, adv) < 0 {
