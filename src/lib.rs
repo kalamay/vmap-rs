@@ -1,7 +1,9 @@
-//! A cross-platform library for fast and safe memory-mapped IO
+//! A cross-platform library for fast and safe memory-mapped IO and boundary-free
+//! ring buffer.
 //!
 //! This library defines a convenient API for reading and writing to files
-//! using the hosts virtual memory system. The design of the API strives to
+//! using the hosts virtual memory system, as well as allocating memory and
+//! creating circular memory regions. The design of the API strives to
 //! both minimize the frequency of mapping system calls while still retaining
 //! safe access. Critically, it never attempts the own the `File` object used
 //! for mapping. That is, it never clones it or in any way retains it. While
@@ -20,10 +22,12 @@
 //! [`Options`] are specified.
 //!
 //! Additionally, a variety of buffer implementations are provided in the
-//! [`vmap::io`] module. The [`Ring`] and [`InfiniteRing`] use circular memory
-//! address allocations using cross-platform optimizations to minimize excess
-//! resources where possible. The [`BufReader`] and [`BufWriter`] implement
-//! buffered I/O using a [`Ring`] as a backing layer.
+//! [`vmap::io`] module. The [`Ring`] and [`InfiniteRing`] use cross-platform
+//! optimzed circular memory mapping to remove the typical boundary problem
+//! with most circular buffers. This ensures all ranges of the underlying byte
+//! buffer can be viewed as a single byte slice, event when the value wraps
+//! back around to the beginning of the buffer. The [`BufReader`] and [`BufWriter`]
+//! implement buffered I/O using a [`Ring`] as a backing layer.
 //!
 //! # Examples
 //!
