@@ -1,11 +1,11 @@
 [package]
 name = "vmap"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Jeremy Larkin <jeremylarkin@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/kalamay/vmap-rs"
 documentation = "https://docs.rs/vmap"
-description = "Cross-platform library for fast and safe memory-mapped IO"
+description = "Cross-platform library for fast and safe memory-mapped IO and boundary-free ring buffer."
 keywords = ["mmap", "io", "file", "circular-buffer", "ring-buffer"]
 edition = "2021"
 
@@ -16,7 +16,7 @@ io = []
 os = []
 
 [dependencies]
-system_error = "0.1"
+system_error = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
