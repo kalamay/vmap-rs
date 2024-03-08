@@ -16,7 +16,7 @@ io = []
 os = []
 
 [dependencies]
-system_error = "0.1"
+system_error = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
