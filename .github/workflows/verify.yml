@@ -63,9 +63,10 @@ jobs:
     name: Test Android, FreeBSD, and NetBSD
     strategy:
       matrix:
-        target:
+        test_target:
           - aarch64-linux-android
           - x86_64-unknown-freebsd
+        build_target:
           - x86_64-unknown-netbsd
     runs-on: ubuntu-latest
     steps:
@@ -84,4 +85,6 @@ jobs:
           curl -sfSL --retry-delay 10 --retry 5 "${CROSS_URL}" | tar zxf - -C "$HOME/.bin"
           echo "$HOME/.bin" >> $GITHUB_PATH
       - name: Cross Test
-        run: cross test --target ${{ matrix.target }}
+        run: cross test --target ${{ matrix.test_target }}
+      - name: Cross Build
+        run: cross build --target ${{ matrix.build_target }}
