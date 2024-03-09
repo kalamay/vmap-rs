@@ -90,7 +90,6 @@ jobs:
         target:
           - x86_64-unknown-freebsd
           - x86_64-unknown-netbsd
-          - x86_64-unknown-dragonfly
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -101,8 +100,6 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - name: Install Target
-        run: rustup target add ${{ matrix.target }}
       - name: Install Cross
         run: cargo install cross --git https://github.com/cross-rs/cross --rev 085092c
       - name: Cross Test
