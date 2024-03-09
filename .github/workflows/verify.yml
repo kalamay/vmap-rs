@@ -62,7 +62,7 @@ jobs:
   # For test vs build https://github.com/cross-rs/cross?tab=readme-ov-file#supported-targets
 
   test_cross:
-    name: Test Android amd Musl
+    name: Test Android and Musl
     strategy:
       matrix:
         target:
