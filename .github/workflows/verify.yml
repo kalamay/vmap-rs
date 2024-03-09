@@ -59,14 +59,15 @@ jobs:
         with:
           command: test
 
-  build_misc:
-    name: Build miscellaneous systems
+  # For test vs build https://github.com/cross-rs/cross?tab=readme-ov-file#supported-targets
+
+  test_cross:
+    name: Test Android and Musl
     strategy:
       matrix:
         target:
-          - x86_64-unknown-netbsd
-          - x86_64-unknown-freebsd
           - aarch64-linux-android
+          - x86_64-unknown-linux-musl
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
@@ -78,10 +79,28 @@ jobs:
           toolchain: stable
           override: true
       - name: Install Cross
-        run: |
-          CROSS_URL=https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-gnu.tar.gz
-          mkdir -p "$HOME/.bin"
-          curl -sfSL --retry-delay 10 --retry 5 "${CROSS_URL}" | tar zxf - -C "$HOME/.bin"
-          echo "$HOME/.bin" >> $GITHUB_PATH
-      - name: Run cross build
+        run: cargo install cross --git https://github.com/cross-rs/cross --rev 085092c
+      - name: Cross Test
+        run: cross test --target ${{ matrix.target }}
+
+  build_cross:
+    name: Build BSDs
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-freebsd
+          - x86_64-unknown-netbsd
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross --rev 085092c
+      - name: Cross Test
         run: cross build --target ${{ matrix.target }}
