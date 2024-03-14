@@ -4,6 +4,7 @@ use crate::{Result, Size};
 
 use std::cmp;
 use std::io::{self, BufRead, Read, Write};
+use std::ops::Deref;
 
 /// Fixed-size reliable read/write buffer with sequential address mapping.
 ///
@@ -12,10 +13,10 @@ use std::io::{self, BufRead, Read, Write};
 /// memory as the range `N..2*N`. This guarantees that the entire read or
 /// write range may be addressed as a single sequence of bytes.
 ///
-/// Unlike the [`InfiniteRing`](struct.InfiniteRing.html), this type otherise
-/// acts as a "normal" buffer. Writes fill up the buffer, and when full, no
-/// furthur writes may be performed until a read occurs. The writable length
-/// sequence is the capacity of the buffer, less any pending readable bytes.
+/// Unlike the [`InfiniteRing`], this type otherise acts as a "normal" buffer.
+/// Writes fill up the buffer, and when full, no furthur writes may be
+/// performed until a read occurs. The writable length sequence is the capacity
+/// of the buffer, less any pending readable bytes.
 ///
 /// # Examples
 ///
@@ -78,6 +79,14 @@ impl Ring {
             wpos: 0,
         })
     }
+
+    /// Clears the buffer, resetting the filled region to empty.
+    ///
+    /// The number of initialized bytes is not changed, and the contents of the buffer are not modified.
+    pub fn clear(&mut self) {
+        self.rpos = 0;
+        self.wpos = 0;
+    }
 }
 
 impl Drop for Ring {
@@ -90,9 +99,11 @@ impl SeqRead for Ring {
     fn as_read_ptr(&self) -> *const u8 {
         self.ptr
     }
+
     fn read_offset(&self) -> usize {
         self.rpos as usize % self.len
     }
+
     fn read_len(&self) -> usize {
         (self.wpos - self.rpos) as usize
     }
@@ -102,17 +113,20 @@ impl SeqWrite for Ring {
     fn as_write_ptr(&mut self) -> *mut u8 {
         self.ptr
     }
+
     fn write_offset(&self) -> usize {
         self.wpos as usize % self.len
     }
+
     fn write_len(&self) -> usize {
         self.write_capacity() - self.read_len()
     }
+
     fn write_capacity(&self) -> usize {
         self.len
     }
+
     fn feed(&mut self, len: usize) {
-        // todo will fail at u64 boundary
         self.wpos += cmp::min(len, self.write_len()) as u64;
     }
 }
@@ -143,6 +157,24 @@ impl Write for Ring {
     }
 }
 
+impl Deref for Ring {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_read_slice(usize::MAX)
+    }
+}
+
+impl AsRef<[u8]> for Ring
+where
+    <Ring as Deref>::Target: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
 /// Fixed-size lossy read/write buffer with sequential address mapping.
 ///
 /// This uses a circular address mapping scheme. That is, for any buffer of
@@ -150,9 +182,9 @@ impl Write for Ring {
 /// memory as the range `N..2*N`. This guarantees that the entire read or
 /// write range may be addressed as a single sequence of bytes.
 ///
-/// Unlike the [`Ring`](struct.Ring.html), writes to this type may evict
-/// bytes from the read side of the queue. The writeable size is always equal
-/// to the overall capacity of the buffer.
+/// Unlike the [`Ring`], writes to this type may evict bytes from the read side
+/// of the queue. The writeable size is always equal to the overall capacity of
+/// the buffer.
 ///
 /// # Examples
 ///
@@ -221,7 +253,7 @@ impl SeqRead for InfiniteRing {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        (self.wpos - self.rlen)as usize % self.len
+        (self.wpos - self.rlen) as usize % self.len
     }
     fn read_len(&self) -> usize {
         self.rlen as usize
@@ -282,5 +314,23 @@ impl Write for InfiniteRing {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+impl Deref for InfiniteRing {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_read_slice(usize::MAX)
+    }
+}
+
+impl AsRef<[u8]> for InfiniteRing
+where
+    <InfiniteRing as Deref>::Target: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }

@@ -1,13 +1,12 @@
 //! Read/Write types for buffering.
 //!
-//! Both the [`Ring`](struct.Ring.html) and
-//! [`InfiniteRing`](struct.InfiniteRing.html) are fixed size anonymous allocations
+//! Both the [`Ring`] and [`InfiniteRing`] are fixed size anonymous allocations
 //! utilizing circular address mappinng. The circular mapping ensures that
 //! the entire readable or writable slice may always be addressed as a single,
 //! contiguous allocation. However, these two types differ in one key way:
-//! the [`Ring`](struct.Ring.html) may only written to as readable space
-//! is consumed, whereas the [`InfiniteRing`](struct.InfiniteRing.html) is always
-//! writable and will overwrite unconsumed space as needed.
+//! the [`Ring`] may only written to as readable space is consumed, whereas
+//! the [`InfiniteRing`] is always writable and will overwrite unconsumed
+//! space as needed.
 
 mod ring;
 pub use self::ring::*;
@@ -178,7 +177,7 @@ mod tests {
                     let read = buf.as_read_slice(word_size);
                     let read_u16 = u16::from_ne_bytes(read[0..2].try_into().unwrap());
                     let expe = &((expected & 0xffff) as u16).to_ne_bytes();
-                    let read_page = (expected - start_val)*word_size / page_size;
+                    let read_page = (expected - start_val) * word_size / page_size;
                     if read != expe {
                         if !mismatched {
                             println!(
