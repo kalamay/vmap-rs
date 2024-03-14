@@ -1,7 +1,11 @@
 use super::{Ring, SeqRead, SeqWrite};
 use crate::Result;
 
-use std::io::{self, BufRead, ErrorKind, Read, Write};
+use std::{
+    fmt,
+    io::{self, BufRead, ErrorKind, Read, Write},
+    ops::{Deref, DerefMut},
+};
 
 /// The `BufReader` adds buffering to any reader using a specialized buffer.
 ///
@@ -75,6 +79,42 @@ impl<R: Read> BufReader<R> {
     /// Unwraps this `BufReader`, returning the underlying reader.
     pub fn into_inner(self) -> R {
         self.inner
+    }
+}
+
+impl<R: Read> Deref for BufReader<R> {
+    type Target = R;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.get_ref()
+    }
+}
+
+impl<R: Read> DerefMut for BufReader<R> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.get_mut()
+    }
+}
+
+impl<R> AsRef<R> for BufReader<R>
+where
+    R: Read,
+    <BufReader<R> as Deref>::Target: AsRef<R>,
+{
+    fn as_ref(&self) -> &R {
+        self.deref()
+    }
+}
+
+impl<R> AsMut<R> for BufReader<R>
+where
+    R: Read,
+    <BufReader<R> as Deref>::Target: AsMut<R>,
+{
+    fn as_mut(&mut self) -> &mut R {
+        self.deref_mut()
     }
 }
 

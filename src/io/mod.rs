@@ -178,7 +178,7 @@ mod tests {
                     let read = buf.as_read_slice(word_size);
                     let read_u16 = u16::from_ne_bytes(read[0..2].try_into().unwrap());
                     let expe = &((expected & 0xffff) as u16).to_ne_bytes();
-                    let read_page = (expected - start_val)*word_size / page_size;
+                    let read_page = (expected - start_val) * word_size / page_size;
                     if read != expe {
                         if !mismatched {
                             println!(

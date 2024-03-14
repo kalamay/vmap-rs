@@ -99,11 +99,11 @@ impl Map {
     /// # }
     /// ```
     pub fn into_map_mut(self) -> ConvertResult<MapMut, Self> {
-            let (ptr, len) = unsafe { Size::page().bounds(self.0.ptr, self.0.len) };
-            match unsafe { protect(ptr, len, Protect::ReadWrite) }{
-                Ok(()) => Ok(self.0),
-                Err(err) => Err((err, self)),
-            }
+        let (ptr, len) = unsafe { Size::page().bounds(self.0.ptr, self.0.len) };
+        match unsafe { protect(ptr, len, Protect::ReadWrite) } {
+            Ok(()) => Ok(self.0),
+            Err(err) => Err((err, self)),
+        }
     }
 
     /// Updates the advise for the entire mapped region..
@@ -164,7 +164,10 @@ impl Deref for Map {
     }
 }
 
-impl AsRef<[u8]> for Map {
+impl AsRef<[u8]> for Map
+where
+    <Map as Deref>::Target: AsRef<[u8]>,
+{
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.deref()
@@ -284,11 +287,11 @@ impl MapMut {
     /// # }
     /// ```
     pub fn into_map(self) -> ConvertResult<Map, Self> {
-            let (ptr, len) = unsafe { Size::page().bounds(self.ptr, self.len) };
-            match unsafe { protect(ptr, len, Protect::ReadWrite) }{
-                Ok(()) => Ok(Map(self)),
-                Err(err) => Err((err, self)),
-            }
+        let (ptr, len) = unsafe { Size::page().bounds(self.ptr, self.len) };
+        match unsafe { protect(ptr, len, Protect::ReadWrite) } {
+            Ok(()) => Ok(Map(self)),
+            Err(err) => Err((err, self)),
+        }
     }
 
     /// Writes modifications back to the filesystem.
@@ -430,14 +433,20 @@ impl DerefMut for MapMut {
     }
 }
 
-impl AsRef<[u8]> for MapMut {
+impl AsRef<[u8]> for MapMut
+where
+    <MapMut as Deref>::Target: AsRef<[u8]>,
+{
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.deref()
     }
 }
 
-impl AsMut<[u8]> for MapMut {
+impl AsMut<[u8]> for MapMut
+where
+    <MapMut as Deref>::Target: AsMut<[u8]>,
+{
     #[inline]
     fn as_mut(&mut self) -> &mut [u8] {
         self.deref_mut()

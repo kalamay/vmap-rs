@@ -4,6 +4,7 @@ use crate::{Result, Size};
 
 use std::cmp;
 use std::io::{self, BufRead, Read, Write};
+use std::ops::Deref;
 
 /// Fixed-size reliable read/write buffer with sequential address mapping.
 ///
@@ -143,6 +144,24 @@ impl Write for Ring {
     }
 }
 
+impl Deref for Ring {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_read_slice(usize::MAX)
+    }
+}
+
+impl AsRef<[u8]> for Ring
+where
+    <Ring as Deref>::Target: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
 /// Fixed-size lossy read/write buffer with sequential address mapping.
 ///
 /// This uses a circular address mapping scheme. That is, for any buffer of
@@ -221,7 +240,7 @@ impl SeqRead for InfiniteRing {
         self.ptr
     }
     fn read_offset(&self) -> usize {
-        (self.wpos - self.rlen)as usize % self.len
+        (self.wpos - self.rlen) as usize % self.len
     }
     fn read_len(&self) -> usize {
         self.rlen as usize
@@ -282,5 +301,23 @@ impl Write for InfiniteRing {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+impl Deref for InfiniteRing {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_read_slice(usize::MAX)
+    }
+}
+
+impl AsRef<[u8]> for InfiniteRing
+where
+    <InfiniteRing as Deref>::Target: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
     }
 }
