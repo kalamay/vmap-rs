@@ -1,13 +1,12 @@
 //! Read/Write types for buffering.
 //!
-//! Both the [`Ring`](struct.Ring.html) and
-//! [`InfiniteRing`](struct.InfiniteRing.html) are fixed size anonymous allocations
+//! Both the [`Ring`] and [`InfiniteRing`] are fixed size anonymous allocations
 //! utilizing circular address mappinng. The circular mapping ensures that
 //! the entire readable or writable slice may always be addressed as a single,
 //! contiguous allocation. However, these two types differ in one key way:
-//! the [`Ring`](struct.Ring.html) may only written to as readable space
-//! is consumed, whereas the [`InfiniteRing`](struct.InfiniteRing.html) is always
-//! writable and will overwrite unconsumed space as needed.
+//! the [`Ring`] may only written to as readable space is consumed, whereas
+//! the [`InfiniteRing`] is always writable and will overwrite unconsumed
+//! space as needed.
 
 mod ring;
 pub use self::ring::*;

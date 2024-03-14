@@ -13,10 +13,10 @@ use std::ops::Deref;
 /// memory as the range `N..2*N`. This guarantees that the entire read or
 /// write range may be addressed as a single sequence of bytes.
 ///
-/// Unlike the [`InfiniteRing`](struct.InfiniteRing.html), this type otherise
-/// acts as a "normal" buffer. Writes fill up the buffer, and when full, no
-/// furthur writes may be performed until a read occurs. The writable length
-/// sequence is the capacity of the buffer, less any pending readable bytes.
+/// Unlike the [`InfiniteRing`], this type otherise acts as a "normal" buffer.
+/// Writes fill up the buffer, and when full, no furthur writes may be
+/// performed until a read occurs. The writable length sequence is the capacity
+/// of the buffer, less any pending readable bytes.
 ///
 /// # Examples
 ///
@@ -182,9 +182,9 @@ where
 /// memory as the range `N..2*N`. This guarantees that the entire read or
 /// write range may be addressed as a single sequence of bytes.
 ///
-/// Unlike the [`Ring`](struct.Ring.html), writes to this type may evict
-/// bytes from the read side of the queue. The writeable size is always equal
-/// to the overall capacity of the buffer.
+/// Unlike the [`Ring`], writes to this type may evict bytes from the read side
+/// of the queue. The writeable size is always equal to the overall capacity of
+/// the buffer.
 ///
 /// # Examples
 ///

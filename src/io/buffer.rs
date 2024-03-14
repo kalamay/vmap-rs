@@ -9,9 +9,8 @@ use std::{
 
 /// The `BufReader` adds buffering to any reader using a specialized buffer.
 ///
-/// This is very similar `std::io::BufReader`, but it uses a
-/// [`Ring`](struct.Ring.html) for the internal buffer, and it provides a
-/// configurable low water mark.
+/// This is very similar `std::io::BufReader`, but it uses a [`Ring`] for the
+/// internal buffer, and it provides a configurable low water mark.
 ///
 /// # Examples
 ///
@@ -49,29 +48,46 @@ impl<R: Read> BufReader<R> {
     }
 
     /// Get the low-water level.
+    #[inline]
     pub fn lowat(&self) -> usize {
         self.lowat
     }
 
     /// Set the low-water level.
     ///
-    /// When the internal buffer content length drops to this level, a
-    /// subsequent read will request more from the inner reader.
+    /// When the internal buffer content length drops to this level or below, a
+    /// subsequent call to `fill_buffer()` will request more from the inner reader.
+    ///
+    /// If it desired for `fill_buffer()` to always request a `read()`, you
+    /// may use:
+    ///
+    /// ```
+    /// # use vmap::io::BufReader;
+    /// # fn main() -> std::io::Result<()> {
+    /// let mut buf = BufReader::new(std::io::stdin(), 4096)?;
+    /// buf.set_lowat(usize::MAX);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[inline]
     pub fn set_lowat(&mut self, val: usize) {
         self.lowat = val
     }
 
     /// Gets a reference to the underlying reader.
+    #[inline]
     pub fn get_ref(&self) -> &R {
         &self.inner
     }
 
     /// Gets a mutable reference to the underlying reader.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
     /// Returns a reference to the internally buffered data.
+    #[inline]
     pub fn buffer(&self) -> &[u8] {
         self.buf.as_read_slice(std::usize::MAX)
     }
@@ -150,8 +166,8 @@ impl<R: Read> BufRead for BufReader<R> {
 
 /// The `BufWriter` adds buffering to any writer using a specialized buffer.
 ///
-/// This is very similar `std::io::BufWriter`, but it uses a
-/// [`Ring`](struct.Ring.html) for internal the buffer.
+/// This is very similar `std::io::BufWriter`, but it uses a [`Ring`] for the
+/// internal the buffer.
 ///
 /// # Examples
 ///
