@@ -79,6 +79,14 @@ impl Ring {
             wpos: 0,
         })
     }
+
+    /// Clears the buffer, resetting the filled region to empty.
+    ///
+    /// The number of initialized bytes is not changed, and the contents of the buffer are not modified.
+    pub fn clear(&mut self) {
+        self.rpos = 0;
+        self.wpos = 0;
+    }
 }
 
 impl Drop for Ring {
@@ -91,9 +99,11 @@ impl SeqRead for Ring {
     fn as_read_ptr(&self) -> *const u8 {
         self.ptr
     }
+
     fn read_offset(&self) -> usize {
         self.rpos as usize % self.len
     }
+
     fn read_len(&self) -> usize {
         (self.wpos - self.rpos) as usize
     }
@@ -103,17 +113,20 @@ impl SeqWrite for Ring {
     fn as_write_ptr(&mut self) -> *mut u8 {
         self.ptr
     }
+
     fn write_offset(&self) -> usize {
         self.wpos as usize % self.len
     }
+
     fn write_len(&self) -> usize {
         self.write_capacity() - self.read_len()
     }
+
     fn write_capacity(&self) -> usize {
         self.len
     }
+
     fn feed(&mut self, len: usize) {
-        // todo will fail at u64 boundary
         self.wpos += cmp::min(len, self.write_len()) as u64;
     }
 }
