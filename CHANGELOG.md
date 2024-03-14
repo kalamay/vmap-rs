@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2024-03-13
+- Update some `Size` functions to be `const`
+- Add or improve `AsMut` and `AsRef` implementations
+- Add `Ring::clear()` method
+- Add passthrough implementations for `Read` and `Write` when possible
+- Improve the `BufWriter::into_inner()`
+
 ## [0.6.2] - 2024-03-08
 - Update dependencies
 
@@ -49,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stopped using deprecated examples where possible
 - Return the `File` object when `open`ing from a path
 
-[Unreleased]: https://github.com/kalamay/vmap-rs/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/kalamay/vmap-rs/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/kalamay/vmap-rs/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/kalamay/vmap-rs/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/kalamay/vmap-rs/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/kalamay/vmap-rs/compare/v0.5.1...v0.6.0
