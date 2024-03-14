@@ -362,7 +362,7 @@ impl Size {
     /// assert_eq!(size.round(sys+1), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn round(&self, len: usize) -> usize {
+    pub const fn round(&self, len: usize) -> usize {
         self.truncate(len + self.0 - 1)
     }
 
@@ -382,7 +382,7 @@ impl Size {
     /// assert_eq!(size.truncate(sys+1), sys); // probably 4096
     /// ```
     #[inline]
-    pub fn truncate(&self, len: usize) -> usize {
+    pub const fn truncate(&self, len: usize) -> usize {
         len & !(self.0 - 1)
     }
 
@@ -400,7 +400,7 @@ impl Size {
     /// assert_eq!(size.offset(sys*2 + 123), 123);
     /// ```
     #[inline]
-    pub fn offset(&self, len: usize) -> usize {
+    pub const fn offset(&self, len: usize) -> usize {
         len & (self.0 - 1)
     }
 
@@ -418,7 +418,7 @@ impl Size {
     /// assert_eq!(size.size(2), sys*2); // probably 8192
     /// ```
     #[inline]
-    pub fn size(&self, count: u32) -> usize {
+    pub const fn size(&self, count: u32) -> usize {
         (count as usize) << self.0.trailing_zeros()
     }
 
@@ -439,7 +439,7 @@ impl Size {
     /// assert_eq!(size.count(sys*2), 2);
     /// ```
     #[inline]
-    pub fn count(&self, len: usize) -> u32 {
+    pub const fn count(&self, len: usize) -> u32 {
         (self.round(len) >> self.0.trailing_zeros()) as u32
     }
 
