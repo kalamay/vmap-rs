@@ -2,7 +2,7 @@ use super::{SeqRead, SeqWrite};
 use crate::os::{map_ring, unmap_ring};
 use crate::{Result, Size};
 
-use std::cmp;
+use std::{cmp, slice};
 use std::io::{self, BufRead, Read, Write};
 use std::ops::Deref;
 
@@ -86,6 +86,20 @@ impl Ring {
     pub fn clear(&mut self) {
         self.rpos = 0;
         self.wpos = 0;
+    }
+
+    /// Get an immutable slice covering the read region of the buffer and consume it.
+    #[inline]
+    pub fn read_and_consume(&mut self, max: usize) -> &[u8] {
+        let offset = self.read_offset();
+        let len = cmp::min(self.read_len(), max);
+        self.rpos += len as u64; // consume
+        unsafe {
+            slice::from_raw_parts(
+                self.as_read_ptr().add(offset),
+                len,
+            )
+        }
     }
 }
 
